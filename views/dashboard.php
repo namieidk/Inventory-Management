@@ -193,8 +193,8 @@
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li>Supplier</li>
-                    <li>Supplier Order</li>
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Supplier</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Supplier Order</a></li>
                     <li>Expenses</li>
                     <li>Bills</li>
                 </ul>
