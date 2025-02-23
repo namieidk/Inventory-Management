@@ -230,7 +230,7 @@
     </div>
 
     <div class="main-content">
-        <h1>Inventory</h1>
+        <h1>Employees</h1>
         <div class="d-flex justify-content-between mb-3">
             <div class="search-container">
             <i class="fa fa-search"></i>
@@ -238,47 +238,9 @@
             </div>
             <div>
                 <button class="btn btn-dark" id="newProductBtn">New <i class="fa fa-plus"></i></button>
-                <div id="newProductForm" style="display: none; position: absolute; top: 50%; left: 55%; transform: translate(-50%, -50%); background: lightblue; padding: 40px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); z-index: 1000; width: 1000px; height: 500px;">
-                    <button id="closeFormBtn" style="position: absolute; top: 0px; right: 10px; background: none; border: none; font-size: 40px; cursor: pointer;">&times;</button>
-                    <h2 class="text-center mb-4">Add New Product</h2>
-                    <form>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="productName" class="mr-3" style="width: 150px;">Product Name</label>
-                            <input type="text" class="form-control" id="productName" placeholder="Enter product name" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="productType" class="mr-3" style="width: 150px;">Product Type</label>
-                            <input type="text" class="form-control" id="productType" placeholder="Enter product type" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="supplierName" class="mr-3" style="width: 150px;">Supplier Name</label>
-                            <input type="text" class="form-control" id="supplierName" placeholder="Enter supplier name" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="price" class="mr-3" style="width: 150px;">Price</label>
-                            <input type="number" class="form-control" id="price" placeholder="Enter price" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="stock" class="mr-3" style="width: 150px;">Stock</label>
-                            <input type="number" class="form-control" id="stock" placeholder="Enter stock" style="width: 350px; height: 50px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Submit</button>
-                    </form>
-                    <label for="productImage" class="mb-2" style="position: absolute; top: 80px; right: 180px; font-size: 25px;">Edit Image</label>
-                    <div style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
-                          <input type="file" id="productImage" accept="image/*" style="width: 90%; margin-top: 0px; opacity: 0; position: absolute; z-index: -1;">
-                         <label for="productImage" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">Upload Image</label>
-                    </div>
-                </div>
-                <script>
-                    document.getElementById('closeFormBtn').addEventListener('click', function() {
-                        document.getElementById('newProductForm').style.display = 'none';
-                    });
-                </script>
                 <script>
                     document.getElementById('newProductBtn').addEventListener('click', function() {
-                        var form = document.getElementById('newProductForm');
-                        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                        window.location.href = 'NewCustomer.php';
                     });
                 </script>
                 <select class="btn btn-outline-secondary">
@@ -307,13 +269,13 @@
         <table class="table table-striped table-hover">
             <thead>
                 <tr>
-                    <th>No ID</th>
-                    <th>Product</th>
-                    <th>Type Name</th>
-                    <th>Supplier Name</th>
-                    <th>Price</th>
-                    <th>Stock</th>
-                    <th>Action</th>
+                    <th>Employee ID</th>
+                    <th>Photo</th>
+                    <th>Full Name</th>
+                    <th>Email</th>
+                    <th>Job Title</th>
+                    <th>Phone</th>
+                    <th>Account Status</th>
                 </tr>
             </thead>
             <tbody>

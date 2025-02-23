@@ -3,15 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard</title>
+    <title>New Supplier Order</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
     <style>
         body {
-            display: flex;
             font-family: Arial, sans-serif;
-            background: #f4f4f4;
-            margin: 0;
         }
 
         .left-sidebar {
@@ -107,82 +104,51 @@
             width: calc(100% - 510px);
         }
 
-        .cards {
-            display: flex;
-            gap: 20px;
-        }
-
-        .card {
-            background: white;
+        .sidebar {
+            width: 250px;
+            background-color: #343F79;
+            color: #fff;
             padding: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            flex: 1;
-            text-align: center;
         }
-
-        .right-card {
-            width: 200px;
-            height: 105px;
-            background: white;
-            padding: 20px;
-            box-shadow: 0 2px 5px #FFFFFF;
-            text-align: center;
-            margin-bottom: 20px;
+        .sidebar a {
+            color: #fff;
+            text-decoration: none;
+            display: block;
+            margin: 10px 0;
         }
-
-        .graph-placeholder {
-            background: white;
-            height: 200px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+        }
+        .tab-content {
             margin-top: 20px;
         }
-
-        .inventory-summary {
-            background: white;
+        .btn-save {
+            background-color: #343F79;
+            color: #fff;
+        }
+        .sidebar {
+            background-color: #343F79;
+            width: 250px;
+            height: 100vh;
+            position: fixed;
             padding: 20px;
-            margin-top: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        table {
-            width: 100%;
-            background: white;
-            margin-top: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background: #34495e;
             color: white;
         }
-
-        .search-container {
-            position: relative;
-            width: 50%;
+        .container {
+            margin-left: 270px;
+            padding: 20px;
         }
-
-        .search-container input {
-            width: 100%;
-            padding-left: 30px;
+        .item-table img {
+            width: 40px;
+            height: 40px;
+            border-radius: 5px;
         }
-
-        .search-container .fa-search {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #aaa;
+        .total-section {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 10px;
+            background-color: #f8f9fa;
         }
     </style>
 </head>
@@ -228,74 +194,78 @@
 
         </ul>
     </div>
-
-    <div class="main-content">
-        <h1>Supplier Order</h1>
-        <div class="d-flex justify-content-between mb-3">
-            <div class="search-container">
-            <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+    <div class="container">
+        <h1>New Invoice</h1>
+        <form method="post">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Customer Name</label>
+                    <input type="text" class="form-control" name="supplier_name" style="width: 400px; height: 40px;">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Invoice Number</label>
+                    <input type="text" class="form-control" name="supplier_name" style="width: 400px; height: 40px;">
+                </div>
+                <div class="col-md-6 mt-3">
+                    <label class="form-label">Order Number</label>
+                    <input type="text" class="form-control" name="tin" style="width: 400px; height: 40px;">
+                </div>
+                <div class="col-md-6 mt-3">
+                    <label class="form-label">Invoice Date</label>
+                    <input type="date" class="form-control" name="delivery_date" style="width: 400px; height: 40px;">
+                </div>
+                <div class="col-md-6 mt-3">
+                    <label class="form-label">Payment Status</label>
+                    <input type="text" class="form-control" name="payment_terms" style="width: 400px; height: 40px;">
+                </div>
+                <div class="col-md-6 mt-3">
+                    <label class="form-label">Due Date</label>
+                    <input type="date" class="form-control" name="delivery_date" style="width: 400px; height: 40px;">
+                </div>
             </div>
-            <div>
-                <button class="btn btn-dark" id="newProductBtn">New <i class="fa fa-plus"></i></button>
-                <script>
-                    document.getElementById('newProductBtn').addEventListener('click', function() {
-                        window.location.href = 'NewSupplierOrder.php';
-                    });
-                </script>
-                <select class="btn btn-outline-secondary">
-                    <option>Order By</option>
-                    <option>Ascending (A → Z)</option>
-                    <option>Descending (Z → A)</option>
-                    <option>Low Price (Ascending)</option>
-                    <option>High Price (Descending)</option>
-                    <option>Newest</option>
-                    <option>Oldest</option>
-                    <option>Best Seller</option>
-                </select>
-                <select class="btn btn-outline-secondary">
-                    <option>Product Type</option>
-                    <option>Product Supplier</option>
-                    <option>Below ₱1,000</option>
-                    <option>₱1,000 - ₱5,000</option>
-                    <option>₱5,000 - ₱10,000</option>
-                    <option>Above ₱10,000</option>
-                    <option>In-Stock</option>
-                    <option>Out of Stock</option>
-                </select>
+            <h4>Item Table</h4>
+            <table class="table item-table">
+                <thead>
+                    <tr>
+                        <th>Order Details</th>
+                        <th>Quantity</th>
+                        <th>Rate</th>
+                        <th>Discount</th>
+                        <th>Tax</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table body will be dynamically added here when an order is placed -->
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-success mt-3">Add Order</button>
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label" style="margin-top: 50px;">Documents</label>
+                    <input type="file" class="form-control" style="width: 400px; ">
+                </div>
+                <div class="col-md-6" style="margin-left: 600px; margin-top: -60px;">
+                    <div class="total-section" style="width: 500px; height: 200px;">
+                        <p class="m-2" style="margin-top: 10px;"><strong>Sub Total:</strong></p>
+                        <p class="m-2" style="margin-top: 10px;"><strong>Discount:</strong></p>
+                        <h5 class="m-2" style="margin-top: 10px;"><strong>Total:</strong></h5>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <table class="table table-striped table-hover">
-            <thead>
-                <tr>
-                    <th>Supplier Order ID</th>
-                    <th>Supplier Name</th>
-                    <th>Contact Person</th>
-                    <th>Order#</th>
-                    <th>Quantity</th>
-                    <th>Total</th>
-                    <th>Status</th>
-                    <th>Delivery Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td colspan="9" class="text-center text-muted">No products available. Input new product.</td>
-                </tr>
-            </tbody>
-        </table>
+            <div class="mt-3">
+                <button type="submit" name="save" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
     </div>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var dropdowns = document.querySelectorAll('.dropdown');
-        dropdowns.forEach(function(dropdown) {
-            var toggleBtn = dropdown.querySelector('.toggle-btn');
-            toggleBtn.addEventListener('click', function() {
-                dropdown.classList.toggle('active');
-            });
+    <script>
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dropdown = btn.closest('.dropdown');
+            dropdown.classList.toggle('active');
         });
     });
-</script>
+    </script>
 </body>
 </html>

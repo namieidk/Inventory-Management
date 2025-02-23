@@ -58,37 +58,37 @@
     <div class="eclipse"></div>
     <div class="signup-container">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
-        <h3 class="mb-3">SIGN UP</h3>
+        <h3 class="mb-3" style="margin-top: -10px;">SIGN UP</h3>
         <form method="POST" action="">
         <div class="mb-3">
     <div class="input-group">
         <span class="input-group-text"><i class="fa-regular fa-envelope"></i></span>
-        <input type="email" name="email" class="form-control" placeholder="Email" required>
+        <input type="email" name="email" class="form-control" style="height: 25px;" placeholder="Email" required>
     </div>
 </div>
 
 <div class="mb-3">
     <div class="input-group">
-        <span class="input-group-text"><i class="fa-regular fa-user"></i></span>
-        <input type="text" name="username" class="form-control" placeholder="Username" required>
-    </div>
-</div>
-
-<div class="mb-3">
-    <div class="input-group">
-        <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-        <input type="password" name="password" class="form-control" placeholder="Password" required>
+        <span class="input-group-text"><i class="fa-regular fa-user" ></i></span>
+        <input type="text" name="username" class="form-control" style="margin-top: 10px; height: 25px;" placeholder="Username" required>
     </div>
 </div>
 
 <div class="mb-3">
     <div class="input-group">
         <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-        <input type="password" name="confirm_password" class="form-control" placeholder="Confirm Password" required>
+        <input type="password" name="password" class="form-control" style="margin-top: 10px; height: 25px;" placeholder="Password" required>
     </div>
 </div>
 
-            <button type="submit" class="btn btn-dark w-100">Sign Up</button>
+<div class="mb-3">
+    <div class="input-group">
+        <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
+        <input type="password" name="confirm_password" class="form-control" style="margin-top: 10px; height: 30px;" placeholder="Confirm Password" required>
+    </div>
+</div>
+
+            <button type="submit" class="btn btn-dark w-100" style="margin-top: 30px; width: 80px; height: 20px;">Sign Up</button>
         </form>
         <p class="mt-3">Already have an account? <a href="Login.php">Log in here.</a></p>
     </div>

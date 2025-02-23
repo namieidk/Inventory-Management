@@ -174,7 +174,7 @@
     </div>
 
 <div class="main-content">
-    <h1>New Supplier</h1>
+    <h1>New Customer</h1>
     <form action="process_supplier.php" method="POST">
         <div class="mb-3 d-flex">
             <select class="form-select me-2" name="salutation" style="width: 100px; height: 45px;">
@@ -203,7 +203,7 @@
                 <a class="nav-link active" data-bs-toggle="tab" href="#details">Other Details</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#address">Address</a>
+                <a class="nav-link" data-bs-toggle="tab" id="address">Address</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" data-bs-toggle="tab" href="#remarks">Remarks</a>

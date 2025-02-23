@@ -69,24 +69,24 @@
     <div class="eclipse"></div>
     <div class="login-container">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
-        <h3 class="mb-3">USER LOGIN</h3>
+        <h3 class="mb-3" style="margin-top: -10px;">USER LOGIN</h3>
         <?php if (!empty($error_message)) echo "<div class='alert alert-danger'>$error_message</div>"; ?>
         <form method="POST" action="login.php">
         <div class="mb-3">
     <div class="input-group">
         <span class="input-group-text"><i class="fa-regular fa-user"></i></span>
-        <input type="text" name="username" class="form-control" placeholder="Username" required>
+        <input type="text" name="username" class="form-control" style="margin-top: 10px; height: 25px;" placeholder="Username" required>
     </div>
 </div>
 
 <div class="mb-3">
     <div class="input-group">
         <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-        <input type="password" name="password" class="form-control" placeholder="Password" required>
+        <input type="password" name="password" class="form-control" style="margin-top: 10px; height: 25px;" placeholder="Password" required>
     </div>
 </div>
 
-            <button type="submit" class="btn btn-dark w-100">Login</button>
+            <button type="submit" class="btn btn-dark w-100" style="width: 80px; height: 20px; margin-top: 20px">Login</button>
         </form>
         
         <div class="separator"><span style="font-size: 20px;">or</span></div>
