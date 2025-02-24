@@ -1,3 +1,33 @@
+<?php
+include '../database/database.php';
+
+session_start();
+$error_message = ""; 
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    try {
+        $stmt = $conn->prepare("SELECT * FROM users WHERE username = :username");
+        $stmt->bindParam(':username', $username);
+        $stmt->execute();
+
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user && password_verify($password, $user['password'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            echo "<script>alert('Login successful!'); window.location.href = 'dashboard.php';</script>";
+            exit;
+        } else {
+            $error_message = "Invalid username or password.";
+        }
+    } catch (PDOException $e) {
+        $error_message = "Error: " . $e->getMessage();
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,62 +35,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <link href="../statics/css/bootstrap.min.css" rel="stylesheet">
+    <link href="../statics/Login.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
-    <style>
-        body {
-            background: linear-gradient(to bottom, #0c1445, #64668c);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .eclipse {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
-            filter: blur(10px);
-        }
-        .login-container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-            width: 350px;
-            text-align: center;
-            position: relative;
-            z-index: 2;
-        }
-        .logo {
-            width: 80px;
-            margin-bottom: 15px;
-        }
-        .separator {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            margin: 15px 0;
-        }
-        .separator::before, .separator::after {
-            content: "";
-            flex: 1;
-            border-bottom: 1px solid #ccc;
-        }
-        .separator span {
-            padding: 0 10px;
-            font-size: 14px;
-            color: #666;
-        }
-        .btn-light {
-            border: 1px solid #ccc;
-            background-color: #f8f9fa;
-            color: #333;
-        }
-        .btn-light:hover {
-            background-color: #e2e6ea;
-        }
-    </style>
+   
 </head>
 <body>
     <div class="eclipse"></div>

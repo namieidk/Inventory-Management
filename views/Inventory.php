@@ -1,3 +1,47 @@
+<?php
+include '../database/database.php';
+session_start();
+
+try {
+    $stmt = $conn->query("SELECT * FROM products");
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $error = "Database error: " . $e->getMessage();
+}
+
+try{
+    if ($_SERVER["REQUEST_METHOD"] == "POST") {
+        $id = $_POST['id'];
+        $productName = $_POST['productName'];
+        $productType = $_POST['productType'];
+        $supplierName = $_POST['supplierName'];
+        $price = $_POST['price'];
+        $stock = $_POST['stock'];
+
+        // ✅ Image Upload
+        $imagePath = null;
+        if (!empty($_FILES['productImage']['name'])) {
+            $targetDir = "uploads/";
+            if (!is_dir($targetDir)) {
+                mkdir($targetDir, 0777, true); // Create uploads directory if not exists
+            }
+            $targetFile = $targetDir . basename($_FILES["productImage"]["name"]);
+            move_uploaded_file($_FILES["productImage"]["tmp_name"], $targetFile);
+            $imagePath = $targetFile;
+        }
+        $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, image_path) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$productName, $productType, $supplierName, $price, $stock, $imagePath]);
+
+        echo "<script>alert('Product added successfully!'); </script>";
+    }
+} catch (PDOException $e) {
+    die("Connection failed: " . $e->getMessage());
+
+}
+
+
+ 
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,194 +49,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory Dashboard</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
+    <link href="../statics/Inventory.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
-    <style>
-        body {
-            display: flex;
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
-            margin: 0;
-        }
-
-        .left-sidebar {
-            width: 250px;
-            background: #343F79;
-            color: white;
-            height: 100vh;
-            padding: 20px;
-            position: fixed;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow-y: auto;
-        }
-
-        .logo {
-            width: 138px;
-            height: 138px;
-            object-fit: cover;
-            border-radius: 50%;
-            margin-bottom: 20px;
-        }
-
-        .menu {
-            list-style: none;
-            padding: 0;
-            width: 100%;
-        }
-
-        .menu li {
-            padding: 15px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            position: relative;
-            transition: background-color 0.3s ease;
-        }
-
-        .menu li i {
-            margin-right: 8px;
-        }
-
-        .menu li:hover {
-            background: #3e4a8c;
-        }
-        
-
-        .dropdown {
-            position: relative;
-            width: 100%;
-        }
-
-        .toggle-btn {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-        }
-
-        .submenu {
-            display: none;
-            list-style: none;
-            padding-left: 0;
-            margin-top: 5px;
-        }
-
-        .submenu li {
-            padding: 10px 15px;
-            background: #435299;
-            border-left: 3px solid #1abc9c;
-            margin-left: 10px; 
-            transition: background-color 0.3s ease;
-        }
-
-        .submenu li:hover {
-            background-color: #5264b3;
-            color: white;
-        }
-
-        .dropdown.active .submenu {
-            display: block;
-        }
-
-        .main-content {
-            margin-left: 250px; 
-            padding: 20px;
-            width: calc(100% - 250px); 
-            transition: width 0.3s;
-        }
-
-        .main-content.right-sidebar-open {
-            width: calc(100% - 510px);
-        }
-
-        .cards {
-            display: flex;
-            gap: 20px;
-        }
-
-        .card {
-            background: white;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            flex: 1;
-            text-align: center;
-        }
-
-        .right-card {
-            width: 200px;
-            height: 105px;
-            background: white;
-            padding: 20px;
-            box-shadow: 0 2px 5px #FFFFFF;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .graph-placeholder {
-            background: white;
-            height: 200px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            margin-top: 20px;
-        }
-
-        .inventory-summary {
-            background: white;
-            padding: 20px;
-            margin-top: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        table {
-            width: 100%;
-            background: white;
-            margin-top: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background: #34495e;
-            color: white;
-        }
-
-        .search-container {
-            position: relative;
-            width: 50%;
-        }
-
-        .search-container input {
-            width: 100%;
-            padding-left: 30px;
-        }
-
-        .search-container .fa-search {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #aaa;
-        }
-    </style>
+    
 </head>
 <body>
 <div class="left-sidebar">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
         <ul class="menu">
-            <li><i class="fa fa-home"></i><span> Home</span></li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
             <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
-            <li><i class="fa fa-credit-card"></i><span><a href="Payment.php" style="color: white; text-decoration: none;"> Payment</a></span></li>
 
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
@@ -205,27 +71,37 @@
             <li class="dropdown">
                 <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
-                    <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
-                    <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
+                    <li>Customers</li>
+                    <li>Invoice</li>
+                    <li>Sales Order</li>
                 </ul>
             </li>
 
             <li class="dropdown">
-                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <i class="fa fa-store"></i><span> Bills</span><i class="fa fa-chevron-down toggle-btn"></i>
                 <ul class="submenu">
-                    <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
-                    <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
-                    <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Payment</a></li>
                 </ul>
             </li>
-            <li>
-                 <a href="Reports.php" style="text-decoration: none; color: inherit;">
-                     <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
-                 </a>
+
+            <li class="dropdown">
+                <i class="fa fa-store"></i><span> Reports</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">Sales Report</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Inventory Report</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Payment Report</a></li>
+                </ul>
             </li>
-
-
+            
+            <li class="dropdown">
+                <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+                <ul class="submenu">
+                    <li><a href="supplier.php" style="color: white; text-decoration: none;">User Management </a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Employees</a></li>
+                    <li><a href="SupplierOrder.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+                </ul>
+            </li>
         </ul>
     </div>
 
@@ -241,29 +117,36 @@
                 <div id="newProductForm" style="display: none; position: absolute; top: 50%; left: 55%; transform: translate(-50%, -50%); background: lightblue; padding: 40px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); z-index: 1000; width: 1000px; height: 500px;">
                     <button id="closeFormBtn" style="position: absolute; top: 0px; right: 10px; background: none; border: none; font-size: 40px; cursor: pointer;">&times;</button>
                     <h2 class="text-center mb-4">Add New Product</h2>
-                    <form>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="productName" class="mr-3" style="width: 150px;">Product Name</label>
-                            <input type="text" class="form-control" id="productName" placeholder="Enter product name" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="productType" class="mr-3" style="width: 150px;">Product Type</label>
-                            <input type="text" class="form-control" id="productType" placeholder="Enter product type" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="supplierName" class="mr-3" style="width: 150px;">Supplier Name</label>
-                            <input type="text" class="form-control" id="supplierName" placeholder="Enter supplier name" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="price" class="mr-3" style="width: 150px;">Price</label>
-                            <input type="number" class="form-control" id="price" placeholder="Enter price" style="width: 350px; height: 50px;">
-                        </div>
-                        <div class="form-group d-flex align-items-center mb-3">
-                            <label for="stock" class="mr-3" style="width: 150px;">Stock</label>
-                            <input type="number" class="form-control" id="stock" placeholder="Enter stock" style="width: 350px; height: 50px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Submit</button>
-                    </form>
+                    <form method="POST" enctype="multipart/form-data">
+    <div class="form-group d-flex align-items-center mb-3">
+        <label for="productName" class="mr-3" style="width: 150px;">Product Name</label>
+        <input type="text" class="form-control" id="productName" name="productName" placeholder="Enter product name" style="width: 350px; height: 50px;" required>
+    </div>
+    <div class="form-group d-flex align-items-center mb-3">
+        <label for="productType" class="mr-3" style="width: 150px;">Product Type</label>
+        <input type="text" class="form-control" id="productType" name="productType" placeholder="Enter product type" style="width: 350px; height: 50px;" required>
+    </div>
+    <div class="form-group d-flex align-items-center mb-3">
+        <label for="supplierName" class="mr-3" style="width: 150px;">Supplier Name</label>
+        <input type="text" class="form-control" id="supplierName" name="supplierName" placeholder="Enter supplier name" style="width: 350px; height: 50px;" required>
+    </div>
+    <div class="form-group d-flex align-items-center mb-3">
+        <label for="price" class="mr-3" style="width: 150px;">Price</label>
+        <input type="number" class="form-control" id="price" name="price" placeholder="Enter price" style="width: 350px; height: 50px;" required>
+    </div>
+    <div class="form-group d-flex align-items-center mb-3">
+        <label for="stock" class="mr-3" style="width: 150px;">Stock</label>
+        <input type="number" class="form-control" id="stock" name="stock" placeholder="Enter stock" style="width: 350px; height: 50px;" required>
+    </div>
+    <div style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
+    <img id="previewImage" src="#" alt="Image Preview" style="display: none; width: 100%; height: 100%; object-fit: cover;">
+    <input type="file" name="productImage" id="productImage" accept="image/*" style="width: 90%; margin-top: 0px; opacity: 0; position: absolute; z-index: -1;">
+    <label for="productImage" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">Upload Image</label>
+</div>
+
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+
                     <label for="productImage" class="mb-2" style="position: absolute; top: 80px; right: 180px; font-size: 25px;">Edit Image</label>
                     <div style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
                           <input type="file" id="productImage" accept="image/*" style="width: 90%; margin-top: 0px; opacity: 0; position: absolute; z-index: -1;">
@@ -307,19 +190,40 @@
         <table class="table table-striped table-hover">
             <thead>
                 <tr>
-                    <th>No ID</th>
+                    <th>Prod ID</th>
                     <th>Product</th>
                     <th>Type Name</th>
                     <th>Supplier Name</th>
                     <th>Price</th>
                     <th>Stock</th>
+                    <th>Image</th>
                     <th>Action</th>
                 </tr>
             </thead>
             <tbody>
+            <?php if (isset($error)): ?>
+            <tr><td colspan="7" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
+        <?php elseif (!empty($products)): ?>
+            <?php foreach ($products as $product): ?>
                 <tr>
-                    <td colspan="7" class="text-center text-muted">No products available. Input new product.</td>
+                 <td><?= htmlspecialchars($product['id']) ?></td>
+                    <td><?= htmlspecialchars($product['product_name']) ?></td>
+                    <td><?= htmlspecialchars($product['product_type']) ?></td>
+                    <td><?= htmlspecialchars($product['supplier_name']) ?></td>
+                    <td>₱<?= number_format($product['price'], 2) ?></td>
+                    <td><?= htmlspecialchars($product['stock']) ?></td>
+                    <td><img src="uploads/<?= htmlspecialchars($product['Image']) ?>" alt="Product Image" width="80" height="80"></td>
+                    <td>
+                        <button class="btn btn-warning btn-sm">Edit</button>
+                        <td>
+    <button class="btn btn-danger btn-sm" onclick="removeRow(this, <?php echo $product_id; ?>)">Archive</button>
+</td>
+
                 </tr>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <tr><td colspan="7" class="text-center text-muted">No products available. Input new product.</td></tr>
+        <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -333,6 +237,44 @@
             });
         });
     });
+
+    document.getElementById("productImage").addEventListener("change", function(event) {
+        const preview = document.getElementById("previewImage");
+        const file = event.target.files[0];
+
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function removeRow(button, productId) {
+    if (confirm("Are you sure you want to archive this product?")) {
+        fetch('archive_product.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'product_id=' + encodeURIComponent(productId)
+        })
+        .then(response => response.text())
+        .then(data => {
+            if (data === 'success') {
+                alert('Product archived successfully!');
+                const row = button.closest('tr');
+                row.parentNode.removeChild(row);
+            } else {
+                alert('Error: ' + data);
+            }
+        })
+        
+    }
+}
+
 </script>
 </body>
 </html>

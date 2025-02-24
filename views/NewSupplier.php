@@ -5,136 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>New Supplier</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
+    <link href="../statics/NewSupplier.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
-    <style>
-        body {
-            display: flex;
-            min-height: 100vh;
-        }
-        .left-sidebar {
-            width: 250px;
-            background: #343F79;
-            color: white;
-            height: 100vh;
-            padding: 20px;
-            position: fixed;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow-y: auto;
-        }
-
-        .logo {
-            width: 138px;
-            height: 138px;
-            object-fit: cover;
-            border-radius: 50%;
-            margin-bottom: 20px;
-        }
-
-        .menu {
-            list-style: none;
-            padding: 0;
-            width: 100%;
-        }
-
-        .menu li {
-            padding: 15px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            position: relative;
-            transition: background-color 0.3s ease;
-        }
-
-        .menu li i {
-            margin-right: 8px;
-        }
-
-        .menu li:hover {
-            background: #3e4a8c;
-        }
-        
-
-        .dropdown {
-            position: relative;
-            width: 100%;
-        }
-
-        .toggle-btn {
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-        }
-
-        .submenu {
-            display: none;
-            list-style: none;
-            padding-left: 0;
-            margin-top: 5px;
-        }
-
-        .submenu li {
-            padding: 10px 15px;
-            background: #435299;
-            border-left: 3px solid #1abc9c;
-            margin-left: 10px; 
-            transition: background-color 0.3s ease;
-        }
-
-        .submenu li:hover {
-            background-color: #5264b3;
-            color: white;
-        }
-
-        .dropdown.active .submenu {
-            display: block;
-        }
-
-        .main-content {
-            margin-left: 250px; 
-            padding: 20px;
-            width: calc(100% - 250px); 
-            transition: width 0.3s;
-        }
-
-        .main-content.right-sidebar-open {
-            width: calc(100% - 510px);
-        }
-
-        
-        .sidebar {
-            width: 250px;
-            background-color: #343F79;
-            color: #fff;
-            padding: 20px;
-        }
-        .sidebar a {
-            color: #fff;
-            text-decoration: none;
-            display: block;
-            margin: 10px 0;
-        }
-        .main-content {
-            flex-grow: 1;
-            padding: 40px;
-        }
-        .tab-content {
-            margin-top: 20px;
-        }
-        .btn-save {
-            background-color: #343F79;
-            color: #fff;
-        }
-    </style>
+   
 </head>
 <body>
 <div class="left-sidebar">
         <img src="../images/Logo.jpg" alt="Le Parisien" class="logo">
         <ul class="menu">
-            <li><i class="fa fa-home"></i><span> Home</span></li>
+        <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
             <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
             <li><i class="fa fa-credit-card"></i><span><a href="Payment.php" style="color: white; text-decoration: none;"> Payment</a></span></li>
 

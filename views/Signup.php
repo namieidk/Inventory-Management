@@ -1,3 +1,34 @@
+<?php
+include '../database/database.php';
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $email = $_POST['email'];
+    $username = $_POST['username'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+
+    try {
+        $checkStmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE username = :username");
+        $checkStmt->bindParam(':username', $username);
+        $checkStmt->execute();
+        $usernameExists = $checkStmt->fetchColumn();
+
+        if ($usernameExists > 0) {
+            echo "<script>alert('Error: Username already exists. Please choose a different username.');</script>";
+        } else {
+            $stmt = $conn->prepare("INSERT INTO users (email, username, password) VALUES (:email, :username, :password)");
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':password', $password);
+
+            $stmt->execute();
+            echo "<script>alert('Sign up successful!'); window.location.href = 'Login.php';</script>";
+        }
+        
+    } catch (PDOException $e) {
+        echo "<script>alert('Error: " . $e->getMessage() . "');</script>";
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,47 +36,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign Up</title>
     <link href="../statics/css/bootstrap.min.css" rel="stylesheet">
+    <link href="../statics/Signup.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
 
-    <style>
-        body {
-            background: linear-gradient(to bottom, #0c1445, #64668c);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .eclipse {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.15);
-            filter: blur(10px);
-        }
-        .eclipse:nth-child(1) { width: 150px; height: 150px; top: 5%; left: 10%; }
-        .eclipse:nth-child(2) { width: 200px; height: 200px; top: 20%; right: 15%; }
-        .eclipse:nth-child(3) { width: 250px; height: 250px; bottom: 10%; left: 5%; }
-        .eclipse:nth-child(4) { width: 300px; height: 300px; bottom: 20%; right: 10%; }
-        .eclipse:nth-child(5) { width: 180px; height: 180px; top: 40%; left: 25%; }
-        .eclipse:nth-child(6) { width: 220px; height: 220px; top: 60%; right: 20%; }
-        .eclipse:nth-child(7) { width: 200px; height: 200px; bottom: 5%; left: 50%; }
-        .eclipse:nth-child(8) { width: 280px; height: 280px; top: 10%; right: 50%; }
-        .signup-container {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-            width: 350px;
-            text-align: center;
-            position: relative;
-            z-index: 2;
-        }
-        .logo {
-            width: 80px;
-            margin-bottom: 15px;
-        }
-    </style>
+    
 </head>
 <body>
     <div class="eclipse"></div>
