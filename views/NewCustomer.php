@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Supplier</title>
+    <title>New Customer</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/NewCustomer.css" rel="stylesheet">
+    <script src="../statics/js/bootstrap.bundle.min.js"></script>
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
-    
 </head>
 <body>
 <div class="left-sidebar">
@@ -47,104 +47,108 @@
                      <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
                  </a>
             </li>
-
-
         </ul>
     </div>
 
 <div class="main-content">
-    <h1>New Customer</h1>
-    <form action="process_supplier.php" method="POST">
-        <div class="mb-3 d-flex">
-            <select class="form-select me-2" name="salutation" style="width: 100px; height: 45px;">
-            <option>Mr.</option>
-            <option>Ms.</option>
-            <option>Mrs.</option>
-            </select>
-            <input type="text" class="form-control me-2" name="first_name" placeholder="First Name" style="width: 300px; height: 45px;">
-            <input type="text" class="form-control" name="last_name" placeholder="Last Name" style="width: 300px; height: 45px;">
-        </div>
-
-        <div class="mb-3">
-            <input type="text" class="form-control" name="company_name" placeholder="Company Name" style="width: 720px; height: 45px;">
-        </div>
-
-        <div class="mb-3">
-            <input type="email" class="form-control" name="email" placeholder="Email Address" style="width: 720px; height: 45px;">
-        </div>
-
-        <div class="mb-3">
-            <input type="tel" class="form-control" name="phone" placeholder="Phone" style="width: 720px; height: 45px;">
-        </div>
-
-        <ul class="nav nav-tabs" id="supplierTabs">
-            <li class="nav-item">
-                <a class="nav-link active" data-bs-toggle="tab" href="#details">Other Details</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" id="address">Address</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#remarks">Remarks</a>
-            </li>
-        </ul>
-
-        <div class="tab-content">
-            <div class="tab-pane fade show active" id="details">
-                <div class="mb-3">
-                    <input type="text" class="form-control" name="company_id" placeholder="Company ID" style="width: 700px; height: 45px;">
-                </div>
-                <div class="mb-3">
-                    <input type="text" class="form-control" name="tax_rate" placeholder="Tax Rate" style="width: 700px; height: 45px;">
-                </div>
-                <div class="mb-3">
-                    <input type="text" class="form-control" name="payment_terms" placeholder="Payment Terms" style="width: 700px; height: 45px;">
-                </div>
-                <div class="mb-3">
-                    <input type="file" class="form-control" name="documents" style="width: 700px; height: 45px;">
-                </div>
+<div class="container mt-4">
+        <!-- New Customer Form -->
+        <h1>New Customer</h1>
+        <form action="process_supplier.php" method="POST">
+            <div class="mb-3 d-flex">
+                <select class="form-select me-2" name="salutation" style="width: 100px; height: 45px;">
+                    <option>Mr.</option>
+                    <option>Ms.</option>
+                    <option>Mrs.</option>
+                </select>
+                <input type="text" class="form-control me-2" name="first_name" placeholder="First Name" style="width: 300px; height: 45px;">
+                <input type="text" class="form-control" name="last_name" placeholder="Last Name" style="width: 300px; height: 45px;">
             </div>
 
-            <div class="tab-pane fade" id="address">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h4>Billing Address</h4>
-                        <input type="text" class="form-control mb-3" placeholder="Country/Region" required>
-                        <input type="text" class="form-control mb-3" placeholder="Address 1" required>
-                        <input type="text" class="form-control mb-3" placeholder="Address 2" required>
-                        <input type="text" class="form-control mb-3" placeholder="Address 3">
-                        <input type="text" class="form-control mb-3" placeholder="City" required>
-                        <input type="text" class="form-control mb-3" placeholder="Zip Code" required>
-                        <input type="text" class="form-control mb-3" placeholder="Phone" required>
+            <div class="mb-3">
+                <input type="text" class="form-control" name="company_name" placeholder="Company Name" style="width: 720px; height: 45px;">
+            </div>
+
+            <div class="mb-3">
+                <input type="email" class="form-control" name="email" placeholder="Email Address" style="width: 720px; height: 45px;">
+            </div>
+
+            <div class="mb-3">
+                <input type="tel" class="form-control" name="phone" placeholder="Phone" style="width: 720px; height: 45px;">
+            </div>
+
+            <!-- Navigation Buttons -->
+            <ul class="nav nav-pills mb-3" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="details-tab" data-bs-toggle="pill" data-bs-target="#details" type="button" role="tab" aria-controls="details" aria-selected="true">Other Details</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="address-tab" data-bs-toggle="pill" data-bs-target="#address" type="button" role="tab" aria-controls="address" aria-selected="false">Address</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="remarks-tab" data-bs-toggle="pill" data-bs-target="#remarks" type="button" role="tab" aria-controls="remarks" aria-selected="false">Remarks</button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="myTabContent">
+                <!-- Other Details Tab (Now Active by Default) -->
+                <div class="tab-pane fade show active" id="details" role="tabpanel" aria-labelledby="details-tab">
+                    <div class="mb-3">
+                        <input type="text" class="form-control" name="company_id" placeholder="Company ID" style="width: 700px; height: 45px;">
                     </div>
-                    <div class="col-md-6">
-                        <h4>Shipping Address <a href="#" onclick="copyBillingAddress()" style="color: #007bff; font-size: 0.5em;">(📋 Copy Billing Address)</a></h4>
-                        <input type="text" class="form-control mb-3" id="shipCountry" placeholder="Country/Region" required>
-                        <input type="text" class="form-control mb-3" id="shipAddress1" placeholder="Address 1" required>
-                        <input type="text" class="form-control mb-3" id="shipAddress2" placeholder="Address 2" required>
-                        <input type="text" class="form-control mb-3" id="shipAddress3" placeholder="Address 3">
-                        <input type="text" class="form-control mb-3" id="shipCity" placeholder="City" required>
-                        <input type="text" class="form-control mb-3" id="shipZip" placeholder="Zip Code" required>
-                        <input type="text" class="form-control mb-3" id="shipPhone" placeholder="Phone" required>
+                    <div class="mb-3">
+                        <input type="text" class="form-control" name="tax_rate" placeholder="Tax Rate" style="width: 700px; height: 45px;">
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" class="form-control" name="payment_terms" placeholder="Payment Terms" style="width: 700px; height: 45px;">
+                    </div>
+                    <div class="mb-3">
+                        <input type="file" class="form-control" name="documents" style="width: 700px; height: 45px;">
                     </div>
                 </div>
-            </div>
 
-            <div class="tab-pane fade" id="remarks">
-                <div class="mb-3">
-                    <textarea class="form-control" name="remarks" placeholder="Remarks(For Internal Use Only)"></textarea>
+                <!-- Address Tab -->
+                <div class="tab-pane fade" id="address" role="tabpanel" aria-labelledby="address-tab">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h4>Billing Address</h4>
+                            <input type="text" class="form-control mb-3" name="billing_country" placeholder="Country/Region" required>
+                            <input type="text" class="form-control mb-3" name="billing_address1" placeholder="Address 1" required>
+                            <input type="text" class="form-control mb-3" name="billing_address2" placeholder="Address 2" required>
+                            <input type="text" class="form-control mb-3" name="billing_address3" placeholder="Address 3">
+                            <input type="text" class="form-control mb-3" name="billing_city" placeholder="City" required>
+                            <input type="text" class="form-control mb-3" name="billing_zip" placeholder="Zip Code" required>
+                            <input type="text" class="form-control mb-3" name="billing_phone" placeholder="Phone" required>
+                        </div>
+                        <div class="col-md-6">
+                            <h4>Shipping Address <a href="#" onclick="copyBillingAddress()" style="color: #007bff; font-size: 0.5em;">(📋 Copy Billing Address)</a></h4>
+                            <input type="text" class="form-control mb-3" id="shipCountry" name="shipping_country" placeholder="Country/Region" required>
+                            <input type="text" class="form-control mb-3" id="shipAddress1" name="shipping_address1" placeholder="Address 1" required>
+                            <input type="text" class="form-control mb-3" id="shipAddress2" name="shipping_address2" placeholder="Address 2" required>
+                            <input type="text" class="form-control mb-3" id="shipAddress3" name="shipping_address3" placeholder="Address 3">
+                            <input type="text" class="form-control mb-3" id="shipCity" name="shipping_city" placeholder="City" required>
+                            <input type="text" class="form-control mb-3" id="shipZip" name="shipping_zip" placeholder="Zip Code" required>
+                            <input type="text" class="form-control mb-3" id="shipPhone" name="shipping_phone" placeholder="Phone" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Remarks Tab -->
+                <div class="tab-pane fade" id="remarks" role="tabpanel" aria-labelledby="remarks-tab">
+                    <div class="mb-3">
+                        <textarea class="form-control" name="remarks" placeholder="Remarks (For Internal Use Only)"></textarea>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="mt-3">
-            <button type="submit" class="btn btn-save">Save</button>
-            <button type="reset" class="btn btn-secondary">Cancel</button>
-        </div>
-    </form>
-</div>
+            <!-- Submit Button (Optional) -->
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+    </div>
 
-<
 <script>
     document.querySelectorAll('.toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -154,13 +158,14 @@
     });
 
     function copyBillingAddress() {
-        document.getElementById('shipCountry').value = document.querySelector('[placeholder="Country/Region"]').value;
-        document.getElementById('shipAddress1').value = document.querySelector('[placeholder="Address 1"]').value;
-        document.getElementById('shipAddress2').value = document.querySelector('[placeholder="Address 2"]').value;
-        document.getElementById('shipAddress3').value = document.querySelector('[placeholder="Address 3"]').value;
-        document.getElementById('shipCity').value = document.querySelector('[placeholder="City"]').value;
-        document.getElementById('shipZip').value = document.querySelector('[placeholder="Zip Code"]').value;
-        document.getElementById('shipPhone').value = document.querySelector('[placeholder="Phone"]').value;
+        const billingFields = document.querySelectorAll('#address .col-md-6:first-child input');
+        const shippingFields = document.querySelectorAll('#address .col-md-6:last-child input');
+
+        billingFields.forEach((billingInput, index) => {
+            shippingFields[index].value = billingInput.value;
+        });
     }
 </script>
-</html>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

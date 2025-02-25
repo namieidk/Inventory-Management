@@ -101,7 +101,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="7" class="text-center text-muted">No products available. Input new product.</td>
+                    <td colspan="7" class="text-center text-muted">No reports available. Input new reports.</td>
                 </tr>
             </tbody>
         </table>

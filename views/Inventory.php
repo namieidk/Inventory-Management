@@ -18,16 +18,21 @@ try{
         $price = $_POST['price'];
         $stock = $_POST['stock'];
 
-        // ✅ Image Upload
         $imagePath = null;
         if (!empty($_FILES['productImage']['name'])) {
             $targetDir = "uploads/";
             if (!is_dir($targetDir)) {
-                mkdir($targetDir, 0777, true); // Create uploads directory if not exists
+                mkdir($targetDir, 0777, true); 
             }
             $targetFile = $targetDir . basename($_FILES["productImage"]["name"]);
-            move_uploaded_file($_FILES["productImage"]["tmp_name"], $targetFile);
-            $imagePath = $targetFile;
+            
+            //Move file and check if successful
+            if (move_uploaded_file($_FILES["productImage"]["tmp_name"], $targetFile)) {
+                $imagePath = $targetFile; // Save the image path if move was successful
+            } else {
+                echo "<script>alert('Error uploading image.');</script>";
+                $imagePath = null; // Ensure image path is null if upload fails
+            }
         }
         $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, image_path) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->execute([$productName, $productType, $supplierName, $price, $stock, $imagePath]);
@@ -38,9 +43,6 @@ try{
     die("Connection failed: " . $e->getMessage());
 
 }
-
-
- 
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -59,6 +61,7 @@ try{
         <ul class="menu">
         <li><i class="fa fa-home"></i><span><a href="dashboard.php" style="color: white; text-decoration: none;"> Home</a></span></li>
             <li><i class="fa fa-box"></i><span><a href="Inventory.php" style="color: white; text-decoration: none;"> Inventory</a></span></li>
+            <li><i class="fa fa-credit-card"></i><span><a href="Payment.php" style="color: white; text-decoration: none;"> Payment</a></span></li>
 
             <li class="dropdown">
                 <i class="fa fa-store"></i><span> Retailer</span><i class="fa fa-chevron-down toggle-btn"></i>
@@ -118,40 +121,75 @@ try{
                     <button id="closeFormBtn" style="position: absolute; top: 0px; right: 10px; background: none; border: none; font-size: 40px; cursor: pointer;">&times;</button>
                     <h2 class="text-center mb-4">Add New Product</h2>
                     <form method="POST" enctype="multipart/form-data">
+                        
     <div class="form-group d-flex align-items-center mb-3">
         <label for="productName" class="mr-3" style="width: 150px;">Product Name</label>
         <input type="text" class="form-control" id="productName" name="productName" placeholder="Enter product name" style="width: 350px; height: 50px;" required>
     </div>
+
     <div class="form-group d-flex align-items-center mb-3">
         <label for="productType" class="mr-3" style="width: 150px;">Product Type</label>
         <input type="text" class="form-control" id="productType" name="productType" placeholder="Enter product type" style="width: 350px; height: 50px;" required>
     </div>
+
     <div class="form-group d-flex align-items-center mb-3">
         <label for="supplierName" class="mr-3" style="width: 150px;">Supplier Name</label>
         <input type="text" class="form-control" id="supplierName" name="supplierName" placeholder="Enter supplier name" style="width: 350px; height: 50px;" required>
     </div>
+
     <div class="form-group d-flex align-items-center mb-3">
         <label for="price" class="mr-3" style="width: 150px;">Price</label>
         <input type="number" class="form-control" id="price" name="price" placeholder="Enter price" style="width: 350px; height: 50px;" required>
     </div>
+
     <div class="form-group d-flex align-items-center mb-3">
         <label for="stock" class="mr-3" style="width: 150px;">Stock</label>
         <input type="number" class="form-control" id="stock" name="stock" placeholder="Enter stock" style="width: 350px; height: 50px;" required>
     </div>
-    <div style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
-    <img id="previewImage" src="#" alt="Image Preview" style="display: none; width: 100%; height: 100%; object-fit: cover;">
-    <input type="file" name="productImage" id="productImage" accept="image/*" style="width: 90%; margin-top: 0px; opacity: 0; position: absolute; z-index: -1;">
-    <label for="productImage" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">Upload Image</label>
+
+    
+    <div id="imageContainer" style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 8px;">
+    <img id="previewImage" src="<?= isset($uploadedImage) && !empty($uploadedImage) ? htmlspecialchars($uploadedImage) : '#'; ?>" alt="Image Preview" style="<?= isset($uploadedImage) && !empty($uploadedImage) ? 'display: block;' : 'display: none;'; ?> width: 100%; height: 100%; object-fit: cover; cursor: pointer;">
+    <input type="file" name="productImage" id="productImage" accept="image/*" style="display: none;">
+    <?php if (!isset($uploadedImage) || empty($uploadedImage)): ?>
+        <label for="productImage" id="uploadLabel" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">
+            Upload Image
+        </label>
+    <?php endif; ?>
 </div>
 
-    <button type="submit" class="btn btn-primary">Submit</button>
-</form>
+<script>
+    const productImageInput = document.getElementById('productImage');
+    const previewImage = document.getElementById('previewImage');
+    const uploadLabel = document.getElementById('uploadLabel');
 
+    productImageInput.addEventListener('change', function () {
+        const file = this.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                previewImage.src = reader.result;
+                previewImage.style.display = 'block';
+                if (uploadLabel) uploadLabel.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    previewImage.addEventListener('click', () => {
+        productImageInput.click();
+    });
+
+    window.addEventListener('load', () => {
+        if (previewImage.src && previewImage.src !== window.location.href + '#') {
+            if (uploadLabel) uploadLabel.style.display = 'none';
+        }
+    });
+</script>
+
+<button type="submit" class="btn btn-primary">Submit</button>
                     <label for="productImage" class="mb-2" style="position: absolute; top: 80px; right: 180px; font-size: 25px;">Edit Image</label>
-                    <div style="position: absolute; top: 120px; right: 110px; width: 200px; height: 200px; border: 2px solid rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; flex-direction: column; text-align: center;">
-                          <input type="file" id="productImage" accept="image/*" style="width: 90%; margin-top: 0px; opacity: 0; position: absolute; z-index: -1;">
-                         <label for="productImage" style="cursor: pointer; background-color: #6c757d; color: white; padding: 10px 15px; border-radius: 5px; font-size: 14px; width: 90%; text-align: center;">Upload Image</label>
-                    </div>
+                    
                 </div>
                 <script>
                     document.getElementById('closeFormBtn').addEventListener('click', function() {
@@ -173,8 +211,11 @@ try{
                     <option>Newest</option>
                     <option>Oldest</option>
                     <option>Best Seller</option>
+                    <option>Active</option>
+                    <option>Inactive</option>
                 </select>
                 <select class="btn btn-outline-secondary">
+                    <option>Filtered By</option>
                     <option>Product Type</option>
                     <option>Product Supplier</option>
                     <option>Below ₱1,000</option>
@@ -212,18 +253,27 @@ try{
                     <td><?= htmlspecialchars($product['supplier_name']) ?></td>
                     <td>₱<?= number_format($product['price'], 2) ?></td>
                     <td><?= htmlspecialchars($product['stock']) ?></td>
-                    <td><img src="uploads/<?= htmlspecialchars($product['Image']) ?>" alt="Product Image" width="80" height="80"></td>
+                    <td><img src="<?= htmlspecialchars($product['image_path']) ?>" alt="Product Image" width="80" height="80"></td>
                     <td>
-                        <button class="btn btn-warning btn-sm">Edit</button>
-                        <td>
-    <button class="btn btn-danger btn-sm" onclick="removeRow(this, <?php echo $product_id; ?>)">Archive</button>
-</td>
+                    <div class="d-flex align-items-center">
+    <button class="btn btn-warning btn-sm me-1">
+        <i class="fas fa-edit"></i> <!-- Edit icon -->
+    </button>
 
+    <button class="btn btn-info btn-sm me-1">
+        <i class="fas fa-barcode"></i> <!-- Scanner icon -->
+    </button>
+
+    <select class="form-select form-select-sm" style="width: 100px; font-size: 14px; padding: 3px 8px;">
+        <option>Active</option>
+        <option>Inactive</option>
+    </select>
+</div>
                 </tr>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <tr><td colspan="7" class="text-center text-muted">No products available. Input new product.</td></tr>
-        <?php endif; ?>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <tr><td colspan="7" class="text-center text-muted">No inventory available. Input new inevtentory.</td></tr>
+            <?php endif; ?>
             </tbody>
         </table>
     </div>

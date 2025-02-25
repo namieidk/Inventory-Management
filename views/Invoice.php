@@ -104,7 +104,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="8" class="text-center text-muted">No products available. Input new product.</td>
+                    <td colspan="8" class="text-center text-muted">No invoice available. Input new invoice.</td>
                 </tr>
             </tbody>
         </table>

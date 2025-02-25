@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -94,15 +95,31 @@
                 <tr>
                     <th>Customer ID</th>
                     <th>Customer Name</th>
-                    <th>Contact Person</th>
+                    <th>Company Name</th>
                     <th>Email</th>
                     <th>Phone No.</th>
+                    <th>Created By</th>
+                    <th>Created Date</th>
                 </tr>
             </thead>
-            <tbody>
-                <tr>
-                    <td colspan="7" class="text-center text-muted">No products available. Input new product.</td>
-                </tr>
+            <tbody id="customerTableBody">
+                <?php if (!empty($customers)): ?>
+                    <?php foreach ($customers as $customer): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($customer['customer_id']); ?></td>
+                            <td><?php echo htmlspecialchars($customer['first_name'] . ' ' . $customer['last_name']); ?></td>
+                            <td><?php echo htmlspecialchars($customer['company_name'] ?? 'N/A'); ?></td>
+                            <td><?php echo htmlspecialchars($customer['email']); ?></td>
+                            <td><?php echo htmlspecialchars($customer['phone']); ?></td>
+                            <td><?php echo htmlspecialchars($customer['created_by'] ?? 'N/A'); ?></td>
+                            <td><?php echo htmlspecialchars($customer['created_date'] ?? date('Y-m-d H:i:s')); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">No customers available. Input new customer.</td>
+                    </tr>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -116,6 +133,8 @@
             });
         });
     });
+
+    
 </script>
 </body>
 </html>

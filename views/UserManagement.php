@@ -103,7 +103,7 @@
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="7" class="text-center text-muted">No products available. Input new product.</td>
+                    <td colspan="7" class="text-center text-muted">No user available. Input new user.</td>
                 </tr>
             </tbody>
         </table>
