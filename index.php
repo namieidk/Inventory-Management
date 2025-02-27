@@ -1,122 +1,128 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Customer Form</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .table {
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <div class="container mt-4">
-        <!-- New Customer Form -->
-        <h1>New Customer</h1>
-        <form action="process_supplier.php" method="POST">
-            <div class="mb-3 d-flex">
-                <select class="form-select me-2" name="salutation" style="width: 100px; height: 45px;">
-                    <option>Mr.</option>
-                    <option>Ms.</option>
-                    <option>Mrs.</option>
-                </select>
-                <input type="text" class="form-control me-2" name="first_name" placeholder="First Name" style="width: 300px; height: 45px;">
-                <input type="text" class="form-control" name="last_name" placeholder="Last Name" style="width: 300px; height: 45px;">
-            </div>
+<form name="myform" action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
+    <select class="btn btn-outline-secondary" name="orderBy" onchange="document.myform.submit();">
+        <option value="">Order By</option>
+        <option value="name-asc" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'name-asc') echo 'selected'; ?>>Ascending (A → Z)</option>
+        <option value="name-desc" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'name-desc') echo 'selected'; ?>>Descending (Z → A)</option>
+        <option value="price-asc" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'price-asc') echo 'selected'; ?>>Low Price (Ascending)</option>
+        <option value="price-desc" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'price-desc') echo 'selected'; ?>>High Price (Descending)</option>
+        <option value="newest" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'newest') echo 'selected'; ?>>Newest</option>
+        <option value="oldest" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'oldest') echo 'selected'; ?>>Oldest</option>
+        <option value="best-seller" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'best-seller') echo 'selected'; ?>>Best Seller</option>
+        <option value="active" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'active') echo 'selected'; ?>>Active</option>
+        <option value="inactive" <?php if(isset($_POST['orderBy']) && $_POST['orderBy'] == 'inactive') echo 'selected'; ?>>Inactive</option>
+    </select>
+</form>
 
-            <div class="mb-3">
-                <input type="text" class="form-control" name="company_name" placeholder="Company Name" style="width: 720px; height: 45px;">
-            </div>
+<table class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>Prod ID</th>
+            <th>Product</th>
+            <th>Type Name</th>
+            <th>Supplier Name</th>
+            <th>Price</th>
+            <th>Stock</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php
+    include '../database/database.php';
+    session_start();
 
-            <div class="mb-3">
-                <input type="email" class="form-control" name="email" placeholder="Email Address" style="width: 720px; height: 45px;">
-            </div>
+    if ($conn->connect_error) {
+        die("Connection failed: " . $conn->connect_error);
+    }
+    echo "<pre>$sql</pre>";
 
-            <div class="mb-3">
-                <input type="tel" class="form-control" name="phone" placeholder="Phone" style="width: 720px; height: 45px;">
-            </div>
 
-            <!-- Navigation Buttons -->
-            <ul class="nav nav-pills mb-3" id="myTab" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="details-tab" data-bs-toggle="pill" data-bs-target="#details" type="button" role="tab" aria-controls="details" aria-selected="false">Other Details</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="address-tab" data-bs-toggle="pill" data-bs-target="#address" type="button" role="tab" aria-controls="address" aria-selected="true">Address</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="remarks-tab" data-bs-toggle="pill" data-bs-target="#remarks" type="button" role="tab" aria-controls="remarks" aria-selected="false">Remarks</button>
-                </li>
-            </ul>
+    $sql = "SELECT id, product_name, product_type, supplier_name, price, stock, status, date_added, sales FROM sample_products WHERE 1=1";
+    $order = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
 
-            <!-- Tab Content -->
-            <div class="tab-content" id="myTabContent">
-                <!-- Other Details Tab -->
-                <div class="tab-pane fade" id="details" role="tabpanel" aria-labelledby="details-tab">
-                    <div class="mb-3">
-                        <input type="text" class="form-control" name="company_id" placeholder="Company ID" style="width: 700px; height: 45px;">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" class="form-control" name="tax_rate" placeholder="Tax Rate" style="width: 700px; height: 45px;">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" class="form-control" name="payment_terms" placeholder="Payment Terms" style="width: 700px; height: 45px;">
-                    </div>
-                    <div class="mb-3">
-                        <input type="file" class="form-control" name="documents" style="width: 700px; height: 45px;">
-                    </div>
+    // Sorting logic
+    switch ($order) {
+        case 'name-asc':
+            $sql .= " ORDER BY product_name ASC";
+            break;
+        case 'name-desc':
+            $sql .= " ORDER BY product_name DESC";
+            break;
+        case 'price-asc':
+            $sql .= " ORDER BY price ASC";
+            break;
+        case 'price-desc':
+            $sql .= " ORDER BY price DESC";
+            break;
+        case 'newest':
+            $sql .= " ORDER BY date_added DESC";
+            break;
+        case 'oldest':
+            $sql .= " ORDER BY date_added ASC";
+            break;
+        case 'best-seller':
+            $sql .= " ORDER BY sales DESC";
+            break;
+        case 'active':
+            $sql .= " AND status = 'active' ORDER BY id ASC";
+            break;
+        case 'inactive':
+            $sql .= " AND status = 'inactive' ORDER BY id ASC";
+            break;
+        default:
+            $sql .= " ORDER BY id ASC"; // Default sorting
+    }
+
+    $result = $conn->query($sql);
+
+    if (!$result) {
+        die("Query failed: " . $conn->error);
+    }
+
+    if ($result->num_rows > 0):
+        while ($product = $result->fetch_assoc()):
+    ?>
+        <tr>
+            <td><?= htmlspecialchars($product['id']) ?></td>
+            <td><?= htmlspecialchars($product['product_name']) ?></td>
+            <td><?= htmlspecialchars($product['product_type']) ?></td>
+            <td><?= htmlspecialchars($product['supplier_name']) ?></td>
+            <td>₱<?= number_format($product['price'], 2) ?></td>
+            <td><?= htmlspecialchars($product['stock']) ?></td>
+            <td><?= htmlspecialchars($product['status']) ?></td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-warning btn-sm me-1" data-product-id="<?= $product['id'] ?>" data-toggle="modal" data-target="#editProductModal">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-info btn-sm me-1" data-toggle="modal" data-target="#scannerModal">
+                        <i class="fas fa-barcode"></i>
+                    </button>
                 </div>
+            </td>
+        </tr>
+    <?php
+        endwhile;
+    else:
+    ?>
+        <tr><td colspan="8" class="text-center">No products found</td></tr>
+    <?php endif; ?>
+</tbody>
 
-                <!-- Address Tab -->
-                <div class="tab-pane fade show active" id="address" role="tabpanel" aria-labelledby="address-tab">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h4>Billing Address</h4>
-                            <input type="text" class="form-control mb-3" name="billing_country" placeholder="Country/Region" required>
-                            <input type="text" class="form-control mb-3" name="billing_address1" placeholder="Address 1" required>
-                            <input type="text" class="form-control mb-3" name="billing_address2" placeholder="Address 2" required>
-                            <input type="text" class="form-control mb-3" name="billing_address3" placeholder="Address 3">
-                            <input type="text" class="form-control mb-3" name="billing_city" placeholder="City" required>
-                            <input type="text" class="form-control mb-3" name="billing_zip" placeholder="Zip Code" required>
-                            <input type="text" class="form-control mb-3" name="billing_phone" placeholder="Phone" required>
-                        </div>
-                        <div class="col-md-6">
-                            <h4>Shipping Address <a href="#" onclick="copyBillingAddress()" style="color: #007bff; font-size: 0.5em;">(📋 Copy Billing Address)</a></h4>
-                            <input type="text" class="form-control mb-3" id="shipCountry" name="shipping_country" placeholder="Country/Region" required>
-                            <input type="text" class="form-control mb-3" id="shipAddress1" name="shipping_address1" placeholder="Address 1" required>
-                            <input type="text" class="form-control mb-3" id="shipAddress2" name="shipping_address2" placeholder="Address 2" required>
-                            <input type="text" class="form-control mb-3" id="shipAddress3" name="shipping_address3" placeholder="Address 3">
-                            <input type="text" class="form-control mb-3" id="shipCity" name="shipping_city" placeholder="City" required>
-                            <input type="text" class="form-control mb-3" id="shipZip" name="shipping_zip" placeholder="Zip Code" required>
-                            <input type="text" class="form-control mb-3" id="shipPhone" name="shipping_phone" placeholder="Phone" required>
-                        </div>
-                    </div>
-                </div>
+</table>
 
-                <!-- Remarks Tab -->
-                <div class="tab-pane fade" id="remarks" role="tabpanel" aria-labelledby="remarks-tab">
-                    <div class="mb-3">
-                        <textarea class="form-control" name="remarks" placeholder="Remarks (For Internal Use Only)"></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Submit Button (Optional) -->
-            <div class="mt-3">
-                <button type="submit" class="btn btn-primary">Submit</button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Bootstrap JS and Custom Script -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Copy Billing Address to Shipping Address
-        function copyBillingAddress() {
-            const billingFields = document.querySelectorAll('#address .col-md-6:first-child input');
-            const shippingFields = document.querySelectorAll('#address .col-md-6:last-child input');
-
-            billingFields.forEach((billingInput, index) => {
-                shippingFields[index].value = billingInput.value;
-            });
-        }
-    </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

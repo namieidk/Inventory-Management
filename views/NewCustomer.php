@@ -1,3 +1,125 @@
+<?php
+include '../database/database.php';
+
+session_start();
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $errors = array();
+
+    // Required fields validation
+    $required_fields = array(
+        'first_name', 'last_name', 'company_name', 'email', 'phone',
+        'billing_country', 'billing_address1', 'billing_city', 'billing_zip', 'billing_phone',
+        'shipping_country', 'shipping_address1', 'shipping_city', 'shipping_zip', 'shipping_phone'
+    );
+    foreach ($required_fields as $field) {
+        if (empty(trim($_POST[$field]))) {
+            $errors[] = "Please fill in the $field field.";
+        }
+    }
+
+    // Email validation
+    if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Invalid email address.";
+    }
+
+    // File upload handling (documents, optional)
+    $document_path = NULL;
+    if (isset($_FILES['documents']['error']) && $_FILES['documents']['error'] == 0) {
+        $filename = $_FILES['documents']['name'];
+        $filetype = pathinfo($filename, PATHINFO_EXTENSION);
+        $allowed_extensions = array('pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png');
+        if (!in_array(strtolower($filetype), $allowed_extensions)) {
+            $errors[] = "Invalid file type. Only PDF, DOC, DOCX, JPG, JPEG, PNG are allowed.";
+        }
+        if ($_FILES['documents']['size'] > 2097152) { // 2MB limit
+            $errors[] = "File size exceeds the limit (2MB).";
+        }
+        if (empty($errors)) {
+            $unique_filename = uniqid() . '.' . $filetype;
+            $target_path = "uploads/" . $unique_filename;
+            if (move_uploaded_file($_FILES['documents']['tmp_name'], $target_path)) {
+                $document_path = $target_path;
+            } else {
+                $errors[] = "Error moving file.";
+            }
+        }
+    }
+
+    if (!empty($errors)) {
+        foreach ($errors as $error) {
+            echo $error . "<br>";
+        }
+        exit;
+    }
+
+    try {
+        $conn = new PDO($dsn, $username, $password);
+        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $conn->beginTransaction();
+
+        // Insert into customer table
+        $stmt = $conn->prepare("INSERT INTO customer (salutation, first_name, last_name, company_name, email, phone, company_id, payment_terms, document_path, remarks) VALUES (:salutation, :first_name, :last_name, :company_name, :email, :phone, :company_id, :payment_terms, :document_path, :remarks)");
+        $stmt->bindParam(':salutation', $_POST['salutation']);
+        $stmt->bindParam(':first_name', $_POST['first_name']);
+        $stmt->bindParam(':last_name', $_POST['last_name']);
+        $stmt->bindParam(':company_name', $_POST['company_name']);
+        $stmt->bindParam(':email', $_POST['email']);
+        $stmt->bindParam(':phone', $_POST['phone']);
+        $stmt->bindParam(':company_id', $_POST['company_id']);
+        $stmt->bindParam(':payment_terms', $_POST['payment_terms']);
+        $stmt->bindParam(':document_path', $document_path);
+        $stmt->bindParam(':remarks', $_POST['remarks']);
+        $stmt->execute();
+
+        $customer_id = $conn->lastInsertId();
+
+        // Insert billing address
+        $stmt = $conn->prepare("INSERT INTO addresses (customer_id, address_type, country, address1, address2, address3, city, zip, phone) VALUES (:customer_id, 'billing', :country, :address1, :address2, :address3, :city, :zip, :phone)");
+        $stmt->bindParam(':customer_id', $customer_id);
+        $stmt->bindParam(':country', $_POST['billing_country']);
+        $stmt->bindParam(':address1', $_POST['billing_address1']);
+        $stmt->bindParam(':address2', $_POST['billing_address2']);
+        $stmt->bindParam(':address3', $_POST['billing_address3']);
+        $stmt->bindParam(':city', $_POST['billing_city']);
+        $stmt->bindParam(':zip', $_POST['billing_zip']);
+        $stmt->bindParam(':phone', $_POST['billing_phone']);
+        $stmt->execute();
+
+        // Insert shipping address
+        $stmt = $conn->prepare("INSERT INTO addresses (customer_id, address_type, country, address1, address2, address3, city, zip, phone) VALUES (:customer_id, 'shipping', :country, :address1, :address2, :address3, :city, :zip, :phone)");
+        $stmt->bindParam(':customer_id', $customer_id);
+        $stmt->bindParam(':country', $_POST['shipping_country']);
+        $stmt->bindParam(':address1', $_POST['shipping_address1']);
+        $stmt->bindParam(':address2', $_POST['shipping_address2']);
+        $stmt->bindParam(':address3', $_POST['shipping_address3']);
+        $stmt->bindParam(':city', $_POST['shipping_city']);
+        $stmt->bindParam(':zip', $_POST['shipping_zip']);
+        $stmt->bindParam(':phone', $_POST['shipping_phone']);
+        $stmt->execute();
+
+        $conn->commit();
+        echo "Customer created successfully.";
+    } catch (Exception $e) {
+        $conn->rollback();
+        if (isset($document_path) && !empty($document_path)) {
+            unlink($document_path); // Delete uploaded file on error
+        }
+        $errors[] = "Error creating customer: " . $e->getMessage();
+    }
+
+    if (!empty($errors)) {
+        foreach ($errors as $error) {
+            echo $error . "<br>";
+        }
+    }
+} else {
+    header("Location: Customers.php");
+    exit;
+}
+?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,7 +176,7 @@
 <div class="container mt-4">
         <!-- New Customer Form -->
         <h1>New Customer</h1>
-        <form action="process_supplier.php" method="POST">
+        <form action="Customers.php" method="POST">
             <div class="mb-3 d-flex">
                 <select class="form-select me-2" name="salutation" style="width: 100px; height: 45px;">
                     <option>Mr.</option>
@@ -95,10 +217,7 @@
                 <!-- Other Details Tab (Now Active by Default) -->
                 <div class="tab-pane fade show active" id="details" role="tabpanel" aria-labelledby="details-tab">
                     <div class="mb-3">
-                        <input type="text" class="form-control" name="company_id" placeholder="Company ID" style="width: 700px; height: 45px;">
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" class="form-control" name="tax_rate" placeholder="Tax Rate" style="width: 700px; height: 45px;">
+                        <input type="text" class="form-control" name="company_id" placeholder="Contact Person" style="width: 700px; height: 45px;">
                     </div>
                     <div class="mb-3">
                         <input type="text" class="form-control" name="payment_terms" placeholder="Payment Terms" style="width: 700px; height: 45px;">
