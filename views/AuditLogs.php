@@ -92,14 +92,10 @@
         <table class="table table-striped table-hover">
             <thead>
                 <tr>
-                    <th>Log ID</th>
                     <th>Table Name</th>
                     <th>Action</th>
-                    <th>TimeStamp</th>
-                    <th>Created By</th>
-                    <th>Created Date</th>
-                    <th>Updated By</th>
-                    <th>Updated Date</th>
+                    <th>User</th>
+                    <th>Date</th>
                 </tr>
             </thead>
             <tbody>

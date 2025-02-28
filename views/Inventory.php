@@ -19,7 +19,7 @@ if (isset($_GET['product_id'])) {
 
 if (isset($_GET['barcode'])) {
     $barcode = $_GET['barcode'];
-    $stmt = $conn->prepare("SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.userId = u.usersId WHERE p.barcode = ?");
+    $stmt = $conn->prepare("SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.usersId = u.usersId WHERE p.barcode = ?");
     $stmt->execute([$barcode]);
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $product ? json_encode(['product_name' => $product['product_name'], 'created_by' => $product['created_by'], 'created_date' => $product['created_date']]) : json_encode(['error' => 'Not in database']);
@@ -53,9 +53,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $price = floatval($_POST['price']);
         $stock = intval($_POST['stock']);
         $status = $_POST['status'];
-        $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : 1; // Default to 1 if no user logged in
+        $userId = isset($_SESSION['usersId']) ? $_SESSION['usersId'] : 1; // Default to 1 if no user logged in
         if ($price >= 0 && $stock >= 0) {
-            $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, status, userId) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, status, usersId) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$productName, $productType, $supplierName, $price, $stock, $status, $userId]);
         }
     }
@@ -63,7 +63,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 // Fetch products with sorting and filtering
 try {
-    $sql = "SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.userId = u.usersId WHERE 1=1";
+    $sql = "SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.usersId = u.usersId WHERE 1=1";
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
     $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
     $whereClause = '';
@@ -240,14 +240,23 @@ try {
         <li class="dropdown">
             <i class="fa fa-chart-line"></i><span> Sales</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
-                <li>Customers</li>
-                <li>Invoice</li>
-                <li>Sales Order</li>
+                <li><a href="Customers.php" style="color: white; text-decoration: none;">Customers</a></li>
+                <li><a href="Invoice.php" style="color: white; text-decoration: none;">Invoice</a></li>
+                <li><a href="CustomerOrder.php" style="color: white; text-decoration: none;">Customer Order</a></li>
             </ul>
         </li>
         <li class="dropdown">
-            <i class="fa fa-store"></i><span> Bills</span><i class="fa fa-chevron-down toggle-btn"></i>
-            <ul class="submenu"></ul>
+            <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
+            <ul class="submenu">
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management</a></li>
+                <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
+                <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
+            </ul>
+        </li>
+        <li>
+            <a href="Reports.php" style="text-decoration: none; color: inherit;">
+                <i class="fas fa-file-invoice-dollar"></i><span> Reports</span>
+            </a>
         </li>
     </ul>
 </div>

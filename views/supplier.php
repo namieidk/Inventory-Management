@@ -5,8 +5,8 @@ session_start();
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['supplier_id'])) {
         $supplier_id = $_POST['supplier_id'];
-        $supplier_name = $_POST['supplier_name'];
-        $phone_no = $_POST['phone_no'];
+        $company_name = $_POST['company_name'];  
+        $phone = $_POST['phone'];
         $contact_person = $_POST['contact_person'];
         $contact_phone = $_POST['contact_phone'];
         $email = $_POST['email'];
@@ -14,13 +14,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $address1 = $_POST['address1'];
         $address2 = $_POST['address2'];
         $remarks = $_POST['remarks'];
-        $stmt = $conn->prepare("UPDATE Supplier SET SupplierName = ?, PhoneNo = ?, ContactPerson = ?, ContactPhone = ?, Email = ?, PaymentTerms = ?, Address1 = ?, Address2 = ?, Remarks = ? WHERE SupplierID = ?");
-        $stmt->execute([$supplier_name, $phone_no, $contact_person, $contact_phone, $email, $payment_terms, $address1, $address2, $remarks, $supplier_id]);
+        $stmt = $conn->prepare("UPDATE Supplier SET CompanyName = ?, Phone = ?, ContactPerson = ?, ContactPhone = ?, Email = ?, PaymentTerms = ?, Address1 = ?, Address2 = ?, Remarks = ? WHERE SupplierID = ?");  
+        $stmt->execute([$company_name, $phone, $contact_person, $contact_phone, $email, $payment_terms, $address1, $address2, $remarks, $supplier_id]);
         echo 'success';
         exit;
-    } elseif (isset($_POST['supplierName'])) {
-        $supplierName = $_POST['supplierName'];
-        $phoneNo = $_POST['phoneNo'];
+    } elseif (isset($_POST['companyName'])) {  
+        $companyName = $_POST['companyName'];  
+        $phone = $_POST['phone'];
         $contactPerson = $_POST['contactPerson'];
         $contactPhone = $_POST['contactPhone'];
         $email = $_POST['email'];
@@ -29,8 +29,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $address2 = $_POST['address2'];
         $remarks = $_POST['remarks'];
         $userId = isset($_SESSION['userId']) ? $_SESSION['userId'] : 1;
-        $stmt = $conn->prepare("INSERT INTO Supplier (SupplierName, PhoneNo, ContactPerson, ContactPhone, Email, PaymentTerms, Address1, Address2, Remarks, UserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$supplierName, $phoneNo, $contactPerson, $contactPhone, $email, $paymentTerms, $address1, $address2, $remarks, $userId]);
+        $stmt = $conn->prepare("INSERT INTO Supplier (CompanyName, Phone, ContactPerson, ContactPhone, Email, PaymentTerms, Address1, Address2, Remarks, UserId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");  
+        $stmt->execute([$companyName, $phone, $contactPerson, $contactPhone, $email, $paymentTerms, $address1, $address2, $remarks, $userId]);
         echo 'success';
         exit;
     }
@@ -135,9 +135,8 @@ try {
             white-space: nowrap;
             padding: 8px;
         }
-        /* Style for wider modal */
         .modal-lg-custom {
-            max-width: 900px; /* Adjust width as needed */
+            max-width: 900px;
         }
     </style>
 </head>
@@ -202,6 +201,7 @@ try {
             <option>Best Seller</option>
         </select>
         <select class="btn btn-outline-secondary">
+             <option>Filtered By</option>
             <option>Product Type</option>
             <option>Product Supplier</option>
             <option>Below ₱1,000</option>
@@ -218,8 +218,8 @@ try {
             <thead>
                 <tr>
                     <th>Supplier ID</th>
-                    <th>Supplier Name</th>
-                    <th>Phone No.</th>
+                    <th>Company Name</th>  
+                    <th>Phone</th>
                     <th>Contact Person</th>
                     <th>Contact Phone</th>
                     <th>Email</th>
@@ -237,8 +237,8 @@ try {
                     <?php foreach ($suppliers as $supplier): ?>
                         <tr>
                             <td><?= htmlspecialchars($supplier['SupplierID']) ?></td>
-                            <td><?= htmlspecialchars($supplier['SupplierName']) ?></td>
-                            <td><?= htmlspecialchars($supplier['PhoneNo']) ?></td>
+                            <td><?= htmlspecialchars($supplier['CompanyName']) ?></td>  
+                            <td><?= htmlspecialchars($supplier['Phone']) ?></td>
                             <td><?= htmlspecialchars($supplier['ContactPerson']) ?></td>
                             <td><?= htmlspecialchars($supplier['ContactPhone']) ?></td>
                             <td><?= htmlspecialchars($supplier['Email']) ?></td>
@@ -260,7 +260,6 @@ try {
         </table>
     </div>
 
-    <!-- Edit Supplier Modal with Landscape Layout -->
     <div class="modal fade" id="editSupplierModal" tabindex="-1" role="dialog" aria-labelledby="editSupplierModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg-custom" role="document">
             <div class="modal-content">
@@ -275,12 +274,12 @@ try {
                         <input type="hidden" id="editSupplierId" name="supplier_id">
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label for="editSupplierName">Supplier Name</label>
-                                <input type="text" class="form-control" id="editSupplierName" name="supplier_name" required>
+                                <label for="editCompanyName">Company Name</label>  // Changed from First Name
+                                <input type="text" class="form-control" id="editCompanyName" name="company_name" required>  // Changed from first_name
                             </div>
                             <div class="col-md-6 form-group">
-                                <label for="editPhoneNo">Phone No.</label>
-                                <input type="text" class="form-control" id="editPhoneNo" name="phone_no" required>
+                                <label for="editPhone">Phone</label>
+                                <input type="text" class="form-control" id="editPhone" name="phone" required>
                             </div>
                         </div>
                         <div class="row">
@@ -377,8 +376,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#editSupplierModal').modal('hide');
             } else {
                 $('#editSupplierId').val(data.SupplierID);
-                $('#editSupplierName').val(data.SupplierName);
-                $('#editPhoneNo').val(data.PhoneNo);
+                $('#editCompanyName').val(data.CompanyName);  
+                $('#editPhone').val(data.Phone);
                 $('#editContactPerson').val(data.ContactPerson);
                 $('#editContactPhone').val(data.ContactPhone);
                 $('#editEmail').val(data.Email);
