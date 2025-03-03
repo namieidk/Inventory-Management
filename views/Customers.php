@@ -2,6 +2,7 @@
 include '../database/database.php';
 session_start();
 
+// Handle form submission for editing or adding customers
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['customer_id'])) {
         $customer_id = $_POST['customer_id'];
@@ -34,6 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
+// Handle AJAX request for fetching customer details
 if (isset($_GET['customer_id'])) {
     $customer_id = $_GET['customer_id'];
     $stmt = $conn->prepare("SELECT * FROM Customers WHERE CustomerID = ?");
@@ -43,6 +45,65 @@ if (isset($_GET['customer_id'])) {
     exit;
 }
 
+// Handle AJAX search request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'search') {
+    try {
+        $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+        $orderBy = isset($_POST['order_by']) ? $_POST['order_by'] : '';
+        $filterBy = isset($_POST['filter_by']) ? $_POST['filter_by'] : '';
+
+        $query = "SELECT * FROM Customers WHERE 1=1";
+        $params = [];
+
+        if (!empty($searchTerm)) {
+            $query .= " AND (CompanyName LIKE :search 
+                          OR Phone LIKE :search 
+                          OR ContactPerson LIKE :search 
+                          OR Email LIKE :search 
+                          OR CustomerID LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        if ($filterBy) {
+            switch ($filterBy) {
+                case 'hasPhone':
+                    $query .= " AND Phone IS NOT NULL AND Phone != ''";
+                    break;
+                case 'hasEmail':
+                    $query .= " AND Email IS NOT NULL AND Email != ''";
+                    break;
+                case 'hasAddress':
+                    $query .= " AND BillingAddress1 IS NOT NULL AND BillingAddress1 != ''";
+                    break;
+            }
+        }
+
+        if ($orderBy) {
+            $orderParts = explode('_', $orderBy);
+            $field = $orderParts[0];
+            $direction = strtoupper($orderParts[1] ?? 'ASC');
+            $validFields = ['CompanyName', 'Phone', 'CreatedAt'];
+            if (in_array($field, $validFields)) {
+                $query .= " ORDER BY $field $direction";
+            }
+        }
+
+        $stmt = $conn->prepare($query);
+        $stmt->execute($params);
+        $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        header('Content-Type: application/json');
+        echo json_encode($customers);
+        exit;
+    } catch (PDOException $e) {
+        header('Content-Type: application/json');
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['error' => "Database error: " . $e->getMessage()]);
+        exit;
+    }
+}
+
+// Initial page load
 try {
     $stmt = $conn->prepare("SELECT * FROM Customers");
     $stmt->execute();
@@ -184,7 +245,7 @@ try {
     <div class="controls-container">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search..." id="searchInput">
+            <input type="text" class="form-control" placeholder="Search..." id="searchInput" name="search">
         </div>
         <button class="btn btn-dark mr-2" id="newCustomerBtn" style="margin-right: 10px;">New <i class="fa fa-plus"></i></button>
         <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;" id="orderBySelect">
@@ -236,7 +297,7 @@ try {
                             <td><?= htmlspecialchars($customer['BillingAddress2']) ?></td>
                             <td><?= htmlspecialchars($customer['Remarks']) ?></td>
                             <td>
-                                <button class="btn btn-warning btn-sm me-1" data-customer-id="<?= htmlspecialchars($customer['CustomerID']) ?>" data-toggle="modal" data-target="#editCustomerModal">
+                                <button class="btn btn-warning btn-sm me-1 edit-customer-btn" data-customer-id="<?= htmlspecialchars($customer['CustomerID']) ?>" data-toggle="modal" data-target="#editCustomerModal">
                                     <i class="fas fa-edit"></i>
                                 </button>
                             </td>
@@ -316,7 +377,7 @@ try {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Original sidebar functionality
+    // Sidebar functionality
     var dropdowns = document.querySelectorAll('.dropdown');
     dropdowns.forEach(function(dropdown) {
         var toggleBtn = dropdown.querySelector('.toggle-btn');
@@ -349,123 +410,111 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebar.addEventListener('click', function(event) {
             event.stopPropagation();
         });
-    } else {
-        console.error('Sidebar or menu button not found');
     }
 
-    // Store initial customer data
-    const customersData = <?php echo json_encode($customers); ?>;
-
-    // Function to render table
-    function renderTable(customers) {
-        const tbody = document.getElementById('customerTableBody');
-        tbody.innerHTML = '';
-        
-        if (!customers || customers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No customers available.</td></tr>';
-            return;
-        }
-
-        customers.forEach(customer => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${customer.CustomerID}</td>
-                <td>${customer.CompanyName}</td>
-                <td>${customer.Phone}</td>
-                <td>${customer.ContactPerson}</td>
-                <td>${customer.Email}</td>
-                <td>${customer.PaymentTerms}</td>
-                <td>${customer.BillingAddress1}</td>
-                <td>${customer.BillingAddress2 || ''}</td>
-                <td>${customer.Remarks || ''}</td>
-                <td>
-                    <button class="btn btn-warning btn-sm me-1" data-customer-id="${customer.CustomerID}" data-toggle="modal" data-target="#editCustomerModal">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    // Sort function
-    function sortCustomers(customers, sortBy) {
-        if (!sortBy) return customers;
-        
-        const [field, direction] = sortBy.split('_');
-        return [...customers].sort((a, b) => {
-            let valA = a[field] || '';
-            let valB = b[field] || '';
-            
-            if (field === 'CreatedAt') {
-                valA = new Date(valA);
-                valB = new Date(valB);
-            }
-            
-            if (direction === 'asc') {
-                return valA > valB ? 1 : valA < valB ? -1 : 0;
-            } else {
-                return valA < valB ? 1 : valA > valB ? -1 : 0;
-            }
-        });
-    }
-
-    // Filter function
-    function filterCustomers(customers, filterBy) {
-        if (!filterBy) return customers;
-        
-        return customers.filter(customer => {
-            switch(filterBy) {
-                case 'hasPhone':
-                    return customer.Phone && customer.Phone.trim() !== '';
-                case 'hasEmail':
-                    return customer.Email && customer.Email.trim() !== '';
-                case 'hasAddress':
-                    return customer.BillingAddress1 && customer.BillingAddress1.trim() !== '';
-                default:
-                    return true;
-            }
-        });
-    }
-
-    // Handle sorting and filtering
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
     const orderBySelect = document.getElementById('orderBySelect');
     const filterBySelect = document.getElementById('filterBySelect');
+    let searchTimeout;
 
     function updateTable() {
-        let filteredCustomers = filterCustomers(customersData, filterBySelect.value);
-        let sortedCustomers = sortCustomers(filteredCustomers, orderBySelect.value);
-        renderTable(sortedCustomers);
+        const searchTerm = searchInput.value.trim();
+        const orderBy = orderBySelect.value;
+        const filterBy = filterBySelect.value;
+
+        $.ajax({
+            url: 'Customers.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                order_by: orderBy,
+                filter_by: filterBy
+            },
+            success: function(customers) {
+                console.log('Customers received:', customers); // Debug log
+                const tbody = document.getElementById('customerTableBody');
+                tbody.innerHTML = '';
+
+                if (customers.error) {
+                    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${customers.error}</td></tr>`;
+                    return;
+                }
+
+                if (customers.length > 0) {
+                    customers.forEach(customer => {
+                        const row = `
+                            <tr>
+                                <td>${customer.CustomerID}</td>
+                                <td>${customer.CompanyName || ''}</td>
+                                <td>${customer.Phone || ''}</td>
+                                <td>${customer.ContactPerson || ''}</td>
+                                <td>${customer.Email || ''}</td>
+                                <td>${customer.PaymentTerms || ''}</td>
+                                <td>${customer.BillingAddress1 || ''}</td>
+                                <td>${customer.BillingAddress2 || ''}</td>
+                                <td>${customer.Remarks || ''}</td>
+                                <td>
+                                    <button class="btn btn-warning btn-sm me-1 edit-customer-btn" data-customer-id="${customer.CustomerID}" data-toggle="modal" data-target="#editCustomerModal">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No customers available. Input new customer.</td></tr>';
+                }
+
+                // Reattach edit button listeners after table update
+                attachEditButtonListeners();
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('customerTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error loading customers</td></tr>';
+            }
+        });
     }
 
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
+    });
+
+    // Sorting and filtering listeners
     orderBySelect.addEventListener('change', updateTable);
     filterBySelect.addEventListener('change', updateTable);
 
-    // Initial render
-    renderTable(customersData);
+    // Edit button functionality
+    function attachEditButtonListeners() {
+        document.querySelectorAll('.edit-customer-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const customerId = this.getAttribute('data-customer-id');
+                $.get('Customers.php', { customer_id: customerId }, function(data) {
+                    if (data.error) {
+                        alert(data.error);
+                        $('#editCustomerModal').modal('hide');
+                    } else {
+                        $('#editCustomerId').val(data.CustomerID);
+                        $('#editCompanyName').val(data.CompanyName);
+                        $('#editPhone').val(data.Phone);
+                        $('#editContactPerson').val(data.ContactPerson);
+                        $('#editEmail').val(data.Email);
+                        $('#editPaymentTerms').val(data.PaymentTerms);
+                        $('#editBillingAddress1').val(data.BillingAddress1);
+                        $('#editBillingAddress2').val(data.BillingAddress2);
+                        $('#editRemarks').val(data.Remarks);
+                    }
+                }, 'json');
+            });
+        });
+    }
 
-    // Edit modal functionality
-    $('#editCustomerModal').on('show.bs.modal', function (event) {
-        var button = $(event.relatedTarget);
-        var customerId = button.data('customer-id');
-        $.get('Customers.php', { customer_id: customerId }, function(data) {
-            if (data.error) {
-                alert(data.error);
-                $('#editCustomerModal').modal('hide');
-            } else {
-                $('#editCustomerId').val(data.CustomerID);
-                $('#editCompanyName').val(data.CompanyName);
-                $('#editPhone').val(data.Phone);
-                $('#editContactPerson').val(data.ContactPerson);
-                $('#editEmail').val(data.Email);
-                $('#editPaymentTerms').val(data.PaymentTerms);
-                $('#editBillingAddress1').val(data.BillingAddress1);
-                $('#editBillingAddress2').val(data.BillingAddress2);
-                $('#editRemarks').val(data.Remarks);
-            }
-        }, 'json');
-    });
-
+    // Save edit functionality
     document.getElementById('saveEditButton').addEventListener('click', function() {
         var form = document.getElementById('editCustomerForm');
         var data = new FormData(form);
@@ -478,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data === 'success') {
                 alert('Customer updated successfully');
                 $('#editCustomerModal').modal('hide');
-                location.reload();
+                updateTable(); // Refresh table without reload
             } else {
                 alert('Error updating customer: ' + data);
             }
@@ -488,6 +537,10 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error updating customer');
         });
     });
+
+    // Initial table load and event listeners
+    updateTable();
+    attachEditButtonListeners();
 });
 </script>
 </body>

@@ -2,6 +2,14 @@
 include '../database/database.php';
 session_start();
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Define $filterBy and $orderBy globally with default empty values
+$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
+$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
+
 // Handle form submission for editing
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
     try {
@@ -22,7 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
                 Status = :status
             WHERE OrderID = :order_id
         ");
-        
         $stmt->execute([
             ':order_id' => $order_id,
             ':contact_person' => $contact_person,
@@ -41,8 +48,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
             ':quantity' => $quantity,
             ':order_id' => $order_id
         ]);
+
+        echo 'success';
+        exit();
     } catch (PDOException $e) {
-        $error = "Error updating order: " . $e->getMessage();
+        header('HTTP/1.1 500 Internal Server Error');
+        echo "Error updating order: " . $e->getMessage();
+        exit();
     }
 }
 
@@ -74,67 +86,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset
     }
 }
 
-// Get sorting and filtering parameters
-$order_by = $_GET['order_by'] ?? 'OrderDate';
-$order_dir = $_GET['order_dir'] ?? 'DESC';
-$filter = $_GET['filter'] ?? '';
+// Unified fetch function for both initial load and AJAX
+function fetchOrders($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+    try {
+        $sql = "SELECT 
+            so.OrderID,
+            so.SupplierName AS ContactPerson,
+            so.OrderDate,
+            so.DeliveryDate,
+            so.Total,
+            so.SubTotal,
+            so.Discount,
+            SUM(soi.Quantity) AS TotalQuantity,
+            so.Status
+        FROM SupplierOrders so
+        LEFT JOIN SupplierOrderItems soi ON so.OrderID = soi.OrderID
+        WHERE 1=1";
+        $whereClause = '';
+        $orderClause = " ORDER BY so.OrderDate DESC"; // Default
+        $params = [];
 
-// Build the base query for orders
-$query = "
-    SELECT 
-        so.OrderID,
-        so.SupplierName AS ContactPerson,
-        so.OrderDate,
-        so.DeliveryDate,
-        so.Total,
-        so.SubTotal,
-        so.Discount,
-        SUM(soi.Quantity) AS TotalQuantity,
-        so.Status
-    FROM SupplierOrders so
-    LEFT JOIN SupplierOrderItems soi ON so.OrderID = soi.OrderID
-";
+        // Search functionality
+        if (!empty($searchTerm)) {
+            $whereClause .= " AND (so.OrderID LIKE :search 
+                              OR so.SupplierName LIKE :search 
+                              OR so.Status LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
 
-// Add WHERE clause for filtering
-$where_clauses = [];
-$params = [];
-if ($filter) {
-    switch ($filter) {
-        case 'Below ₱1,000':
-            $where_clauses[] = "so.Total < 1000";
-            break;
-        case '₱1,000 - ₱5,000':
-            $where_clauses[] = "so.Total BETWEEN 1000 AND 5000";
-            break;
-        case '₱5,000 - ₱10,000':
-            $where_clauses[] = "so.Total BETWEEN 5000 AND 10000";
-            break;
-        case 'Above ₱10,000':
-            $where_clauses[] = "so.Total > 10000";
-            break;
+        // Filter logic
+        switch ($filterBy) {
+            case 'price-below-1000':
+                $whereClause .= " AND so.Total < 1000";
+                break;
+            case 'price-1000-5000':
+                $whereClause .= " AND so.Total BETWEEN 1000 AND 5000";
+                break;
+            case 'price-5000-10000':
+                $whereClause .= " AND so.Total BETWEEN 5000 AND 10000";
+                break;
+            case 'price-above-10000':
+                $whereClause .= " AND so.Total > 10000";
+                break;
+            default:
+                break;
+        }
+
+        // Order logic
+        switch ($orderBy) {
+            case 'name-asc':
+                $orderClause = " ORDER BY so.SupplierName ASC";
+                break;
+            case 'name-desc':
+                $orderClause = " ORDER BY so.SupplierName DESC";
+                break;
+            case 'price-asc':
+                $orderClause = " ORDER BY so.Total ASC";
+                break;
+            case 'price-desc':
+                $orderClause = " ORDER BY so.Total DESC";
+                break;
+            case 'newest':
+                $orderClause = " ORDER BY so.OrderDate DESC";
+                break;
+            case 'oldest':
+                $orderClause = " ORDER BY so.OrderDate ASC";
+                break;
+            default:
+                break;
+        }
+
+        $sql .= $whereClause . "
+            GROUP BY so.OrderID, so.SupplierName, so.OrderDate, so.DeliveryDate, so.Total, so.SubTotal, so.Discount, so.Status
+        " . $orderClause;
+
+        $stmt = $conn->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return ['error' => "Database error: " . $e->getMessage()];
     }
 }
 
-if (!empty($where_clauses)) {
-    $query .= " WHERE " . implode(" AND ", $where_clauses);
-}
-
-// Add GROUP BY and ORDER BY
-$query .= "
-    GROUP BY so.OrderID, so.SupplierName, so.OrderDate, so.DeliveryDate, so.Total, so.SubTotal, so.Discount, so.Status
-";
-
-$valid_order_columns = ['OrderID', 'SupplierName', 'OrderDate', 'Total', 'Status'];
-$order_column = in_array($order_by, $valid_order_columns) ? $order_by : 'OrderDate';
-$order_dir = strtoupper($order_dir) === 'ASC' ? 'ASC' : 'DESC';
-$query .= " ORDER BY so.$order_column $order_dir";
-
-try {
-    $stmt = $conn->prepare($query);
-    $stmt->execute($params);
-    $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Database error: " . $e->getMessage();
+// Handle AJAX search request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'search') {
+    $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+    $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+    $orders = fetchOrders($conn, $searchTerm, $orderBy, $filterBy);
+    error_log("Search: $searchTerm, OrderBy: $orderBy, FilterBy: $filterBy"); // Debug log to server
+    header('Content-Type: application/json');
+    echo json_encode($orders);
+    exit;
 }
 ?>
 
@@ -147,6 +193,7 @@ try {
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/CustomerOrder.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         .left-sidebar {
             position: fixed;
@@ -185,6 +232,7 @@ try {
             position: relative;
             width: 300px;
             margin-left: 45px;
+            margin-right: 590px;
         }
         .search-container .form-control {
             padding-left: 35px;
@@ -209,6 +257,24 @@ try {
         }
         .order-link:hover {
             color: #0056b3;
+        }
+        .controls-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        .btn-dark.mr-2 {
+            margin-right: 15px;
+        }
+        .btn-outline-secondary.mr-2 {
+            margin-right: 15px;
+        }
+        select.btn.btn-outline-secondary {
+            appearance: auto;
+            padding: 5px;
+            min-width: 150px;
         }
     </style>
 </head>
@@ -256,37 +322,30 @@ try {
         <h1>Supplier Order</h1>
     </div>
 
-    <?php if (isset($error)): ?>
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <?= htmlspecialchars($error) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    <?php endif; ?>
-
-    <div class="d-flex justify-content-between mb-3">
+    <div class="controls-container">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" id="searchInput" placeholder="Search by Order ID, Supplier, etc.">
         </div>
-        <div>
-            <button class="btn btn-dark" id="newProductBtn">New <i class="fa fa-plus"></i></button>
-            <select class="btn btn-outline-secondary" id="orderBySelect">
+        <button class="btn btn-dark mr-2" id="newProductBtn">New <i class="fa fa-plus"></i></button>
+        <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
+            <select class="btn btn-outline-secondary mr-2" name="orderBy" id="orderBySelect" onchange="updateTable()">
                 <option value="">Order By</option>
-                <option value="SupplierName|ASC" <?= $order_by === 'SupplierName' && $order_dir === 'ASC' ? 'selected' : '' ?>>Ascending (A → Z)</option>
-                <option value="SupplierName|DESC" <?= $order_by === 'SupplierName' && $order_dir === 'DESC' ? 'selected' : '' ?>>Descending (Z → A)</option>
-                <option value="Total|ASC" <?= $order_by === 'Total' && $order_dir === 'ASC' ? 'selected' : '' ?>>Low Price (Ascending)</option>
-                <option value="Total|DESC" <?= $order_by === 'Total' && $order_dir === 'DESC' ? 'selected' : '' ?>>High Price (Descending)</option>
-                <option value="OrderDate|DESC" <?= $order_by === 'OrderDate' && $order_dir === 'DESC' ? 'selected' : '' ?>>Newest</option>
-                <option value="OrderDate|ASC" <?= $order_by === 'OrderDate' && $order_dir === 'ASC' ? 'selected' : '' ?>>Oldest</option>
+                <option value="name-asc" <?php if ($orderBy === 'name-asc') echo 'selected'; ?>>Ascending (A → Z)</option>
+                <option value="name-desc" <?php if ($orderBy === 'name-desc') echo 'selected'; ?>>Descending (Z → A)</option>
+                <option value="price-asc" <?php if ($orderBy === 'price-asc') echo 'selected'; ?>>Low Price (Ascending)</option>
+                <option value="price-desc" <?php if ($orderBy === 'price-desc') echo 'selected'; ?>>High Price (Descending)</option>
+                <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
+                <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
             </select>
-            <select class="btn btn-outline-secondary" id="filterBySelect">
-                <option value="">Filter By</option>
-                <option value="Below ₱1,000" <?= $filter === 'Below ₱1,000' ? 'selected' : '' ?>>Below ₱1,000</option>
-                <option value="₱1,000 - ₱5,000" <?= $filter === '₱1,000 - ₱5,000' ? 'selected' : '' ?>>₱1,000 - ₱5,000</option>
-                <option value="₱5,000 - ₱10,000" <?= $filter === '₱5,000 - ₱10,000' ? 'selected' : '' ?>>₱5,000 - ₱10,000</option>
-                <option value="Above ₱10,000" <?= $filter === 'Above ₱10,000' ? 'selected' : '' ?>>Above ₱10,000</option>
+            <select class="btn btn-outline-secondary" name="filterBy" onchange="updateTable()">
+                <option value="">Filtered By</option>
+                <option value="price-below-1000" <?php if ($filterBy === 'price-below-1000') echo 'selected'; ?>>Below ₱1,000</option>
+                <option value="price-1000-5000" <?php if ($filterBy === 'price-1000-5000') echo 'selected'; ?>>₱1,000 - ₱5,000</option>
+                <option value="price-5000-10000" <?php if ($filterBy === 'price-5000-10000') echo 'selected'; ?>>₱5,000 - ₱10,000</option>
+                <option value="price-above-10000" <?php if ($filterBy === 'price-above-10000') echo 'selected'; ?>>Above ₱10,000</option>
             </select>
-        </div>
+        </form>
     </div>
 
     <table class="table table-striped table-hover" id="ordersTable">
@@ -302,37 +361,8 @@ try {
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
-            <?php if (isset($error) && empty($orders)): ?>
-                <tr><td colspan="8" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
-            <?php elseif (!empty($orders)): ?>
-                <?php foreach ($orders as $order): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($order['OrderID']) ?></td>
-                        <td><?= htmlspecialchars($order['ContactPerson']) ?></td>
-                        <td><span class="order-link" data-order-id="<?= htmlspecialchars($order['OrderID']) ?>"><?= htmlspecialchars($order['OrderID']) ?></span></td>
-                        <td><?= htmlspecialchars($order['TotalQuantity']) ?></td>
-                        <td>₱<?= number_format($order['Total'], 2) ?></td>
-                        <td><?= htmlspecialchars($order['Status']) ?></td>
-                        <td><?= htmlspecialchars($order['DeliveryDate']) ?></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary edit-btn" 
-                                    data-order-id="<?= htmlspecialchars($order['OrderID']) ?>"
-                                    data-contact="<?= htmlspecialchars($order['ContactPerson']) ?>"
-                                    data-date="<?= htmlspecialchars($order['OrderDate']) ?>"
-                                    data-delivery="<?= htmlspecialchars($order['DeliveryDate']) ?>"
-                                    data-total="<?= htmlspecialchars($order['Total']) ?>"
-                                    data-quantity="<?= htmlspecialchars($order['TotalQuantity']) ?>"
-                                    data-status="<?= htmlspecialchars($order['Status']) ?>"
-                                    title="Edit Order">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <tr><td colspan="8" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>
-            <?php endif; ?>
+        <tbody id="orderTableBody">
+            <!-- Populated via AJAX -->
         </tbody>
     </table>
 
@@ -422,76 +452,166 @@ try {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var dropdowns = document.querySelectorAll('.dropdown');
-    dropdowns.forEach(function(dropdown) {
-        var toggleBtn = dropdown.querySelector('.toggle-btn');
-        toggleBtn.addEventListener('click', function() {
-            dropdown.classList.toggle('active');
-        });
+    // Dropdown functionality
+    const dropdowns = document.querySelectorAll('.dropdown');
+    dropdowns.forEach(dropdown => {
+        const toggleBtn = dropdown.querySelector('.toggle-btn');
+        toggleBtn.addEventListener('click', () => dropdown.classList.toggle('active'));
     });
 
-    document.getElementById('newProductBtn').addEventListener('click', function() {
+    // New button redirect
+    document.getElementById('newProductBtn').addEventListener('click', () => {
         window.location.href = 'NewSupplierOrder.php';
     });
 
+    // Sidebar toggle
     const menuToggleBtn = document.getElementById('menuToggleBtn');
     const sidebar = document.querySelector('.left-sidebar');
-
     if (menuToggleBtn && sidebar) {
-        menuToggleBtn.addEventListener('click', function(event) {
+        menuToggleBtn.addEventListener('click', (event) => {
             sidebar.classList.toggle('active');
             event.stopPropagation();
         });
-
-        document.addEventListener('click', function(event) {
+        document.addEventListener('click', (event) => {
             if (sidebar.classList.contains('active') && 
                 !sidebar.contains(event.target) && 
                 !menuToggleBtn.contains(event.target)) {
                 sidebar.classList.remove('active');
             }
         });
-
-        sidebar.addEventListener('click', function(event) {
-            event.stopPropagation();
-        });
-    } else {
-        console.error('Sidebar or menu button not found');
+        sidebar.addEventListener('click', (event) => event.stopPropagation());
     }
 
-    // Edit button functionality
-    document.querySelectorAll('.edit-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.getAttribute('data-order-id');
-            const contact = this.getAttribute('data-contact');
-            const orderDate = this.getAttribute('data-date');
-            const deliveryDate = this.getAttribute('data-delivery');
-            const total = this.getAttribute('data-total');
-            const quantity = this.getAttribute('data-quantity');
-            const status = this.getAttribute('data-status');
+    // Table update function
+    function updateTable() {
+        const searchTerm = document.getElementById('searchInput').value.trim();
+        const orderBy = document.querySelector('select[name="orderBy"]').value;
+        const filterBy = document.querySelector('select[name="filterBy"]').value;
 
-            document.getElementById('editOrderId').value = orderId;
-            document.getElementById('editContactPerson').value = contact;
-            document.getElementById('editOrderDate').value = orderDate;
-            document.getElementById('editDeliveryDate').value = deliveryDate;
-            document.getElementById('editTotal').value = total;
-            document.getElementById('editQuantity').value = quantity;
-            document.getElementById('editStatus').value = status;
+        console.log('Updating table with:', { searchTerm, orderBy, filterBy }); // Debug
 
-            const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
-            modal.show();
+        $.ajax({
+            url: 'SupplierOrder.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                orderBy: orderBy,
+                filterBy: filterBy
+            },
+            success: function(orders) {
+                console.log('Orders received:', orders); // Debug
+                const tbody = document.getElementById('orderTableBody');
+                tbody.innerHTML = '';
+
+                if (orders.error) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${orders.error}</td></tr>`;
+                } else if (orders.length > 0) {
+                    orders.forEach(order => {
+                        const row = `
+                            <tr>
+                                <td>${order.OrderID || 'N/A'}</td>
+                                <td>${order.ContactPerson || ''}</td>
+                                <td><span class="order-link" data-order-id="${order.OrderID}">${order.OrderID}</span></td>
+                                <td>${order.TotalQuantity || 0}</td>
+                                <td>₱${parseFloat(order.Total || 0).toFixed(2)}</td>
+                                <td>${order.Status || ''}</td>
+                                <td>${order.DeliveryDate || ''}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary edit-btn" 
+                                            data-order-id="${order.OrderID}"
+                                            data-contact="${order.ContactPerson}"
+                                            data-date="${order.OrderDate}"
+                                            data-delivery="${order.DeliveryDate}"
+                                            data-total="${order.Total}"
+                                            data-quantity="${order.TotalQuantity}"
+                                            data-status="${order.Status}"
+                                            title="Edit Order">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No supplier orders available. Input new order.</td></tr>';
+                }
+
+                // Update the select elements to reflect current values
+                document.querySelector('select[name="orderBy"]').value = orderBy;
+                document.querySelector('select[name="filterBy"]').value = filterBy;
+
+                // Reattach event listeners
+                attachEditButtonListeners();
+                attachOrderLinkListeners();
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error, xhr.responseText);
+                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading orders: ' + xhr.responseText + '</td></tr>';
+            }
         });
+    }
+
+    // Event listeners for search and dropdowns
+    const searchInput = document.getElementById('searchInput');
+    let searchTimeout;
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // Debounce 300ms
     });
 
-    // Handle form submission with temporary success message
+    // Ensure dropdowns trigger table updates
+    document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
+        console.log('Order By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    document.querySelector('select[name="filterBy"]').addEventListener('change', function() {
+        console.log('Filter By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    // Initial table load
+    updateTable();
+
+    // Edit button functionality
+    function attachEditButtonListeners() {
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                const contact = this.getAttribute('data-contact');
+                const orderDate = this.getAttribute('data-date');
+                const deliveryDate = this.getAttribute('data-delivery');
+                const total = this.getAttribute('data-total');
+                const quantity = this.getAttribute('data-quantity');
+                const status = this.getAttribute('data-status');
+
+                document.getElementById('editOrderId').value = orderId || '';
+                document.getElementById('editContactPerson').value = contact || '';
+                document.getElementById('editOrderDate').value = orderDate || '';
+                document.getElementById('editDeliveryDate').value = deliveryDate || '';
+                document.getElementById('editTotal').value = total || '';
+                document.getElementById('editQuantity').value = quantity || '';
+                document.getElementById('editStatus').value = status || '';
+
+                const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
+                modal.show();
+            });
+        });
+    }
+
+    // Form submission for editing
     document.getElementById('editOrderForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        fetch(window.location.href, {
+        fetch('SupplierOrder.php', {
             method: 'POST',
             body: new FormData(this)
         })
-        .then(response => {
-            if (response.ok) {
+        .then(response => response.text())
+        .then(data => {
+            if (data === 'success') {
                 const notification = document.createElement('div');
                 notification.className = 'success-notification alert alert-success alert-dismissible fade show';
                 notification.innerHTML = `
@@ -499,14 +619,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 `;
                 document.body.appendChild(notification);
-
                 const modal = bootstrap.Modal.getInstance(document.getElementById('editOrderModal'));
                 modal.hide();
-
-                setTimeout(() => location.reload(), 1500);
                 setTimeout(() => notification.remove(), 3000);
+                updateTable();
             } else {
-                throw new Error('Update failed');
+                throw new Error(data);
             }
         })
         .catch(error => {
@@ -515,93 +633,59 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Handle sorting and filtering
-    const orderBySelect = document.getElementById('orderBySelect');
-    const filterBySelect = document.getElementById('filterBySelect');
+    // Order details link functionality
+    function attachOrderLinkListeners() {
+        document.querySelectorAll('.order-link').forEach(link => {
+            link.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                document.getElementById('detailsOrderId').textContent = orderId;
 
-    function updateTable() {
-        const orderValue = orderBySelect.value.split('|');
-        const filterValue = filterBySelect.value;
-        
-        const params = new URLSearchParams(window.location.search);
-        if (orderValue[0]) {
-            params.set('order_by', orderValue[0]);
-            params.set('order_dir', orderValue[1] || 'ASC');
-        } else {
-            params.delete('order_by');
-            params.delete('order_dir');
-        }
-        if (filterValue) {
-            params.set('filter', filterValue);
-        } else {
-            params.delete('filter');
-        }
+                const urlParams = new URLSearchParams();
+                urlParams.set('get_details', '1');
+                urlParams.set('order_id', orderId);
+                const fetchUrl = `${window.location.pathname}?${urlParams.toString()}`;
 
-        const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-        window.history.pushState({}, '', newUrl);
-        location.reload();
-    }
+                fetch(fetchUrl)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data.success) throw new Error(data.error || 'Failed to fetch order details');
+                        const items = data.items;
+                        const tbody = document.getElementById('orderItemsTableBody');
+                        tbody.innerHTML = '';
 
-    orderBySelect.addEventListener('change', updateTable);
-    filterBySelect.addEventListener('change', updateTable);
+                        if (items.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No items found for this order</td></tr>';
+                        } else {
+                            items.forEach(item => {
+                                const row = `
+                                    <tr>
+                                        <td>${item.ItemID || 'N/A'}</td>
+                                        <td>${item.ProductName || 'N/A'}</td>
+                                        <td>${item.Quantity || 0}</td>
+                                        <td>₱${item.Rate ? parseFloat(item.Rate).toFixed(2) : '0.00'}</td>
+                                        <td>₱${item.Amount ? parseFloat(item.Amount).toFixed(2) : '0.00'}</td>
+                                    </tr>
+                                `;
+                                tbody.innerHTML += row;
+                            });
+                        }
 
-    // Handle order number click for details
-    document.querySelectorAll('.order-link').forEach(link => {
-        link.addEventListener('click', function() {
-            const orderId = this.getAttribute('data-order-id');
-            document.getElementById('detailsOrderId').textContent = orderId;
-
-            const urlParams = new URLSearchParams(window.location.search);
-            urlParams.set('get_details', '1');
-            urlParams.set('order_id', orderId);
-            const fetchUrl = `${window.location.pathname}?${urlParams.toString()}`;
-
-            fetch(fetchUrl)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!data.success) {
-                        throw new Error(data.error || 'Failed to fetch order details');
-                    }
-
-                    const items = data.items;
-                    const tbody = document.getElementById('orderItemsTableBody');
-                    tbody.innerHTML = ''; // Clear existing rows
-
-                    if (items.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No items found for this order</td></tr>';
-                    } else {
-                        items.forEach(item => {
-                            const row = `
-                                <tr>
-                                    <td>${item.ItemID || 'N/A'}</td>
-                                    <td>${item.ProductName || 'N/A'}</td>
-                                    <td>${item.Quantity || 0}</td>
-                                    <td>₱${item.Rate ? parseFloat(item.Rate).toFixed(2) : '0.00'}</td>
-                                    <td>₱${item.Amount ? parseFloat(item.Amount).toFixed(2) : '0.00'}</td>
-                                </tr>
-                            `;
-                            tbody.innerHTML += row;
-                        });
-                    }
-
-                    const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-                    modal.show();
-                })
-                .catch(error => {
-                    console.error('Fetch error:', error);
-                    alert('Failed to load order details: ' + error.message);
-                    const tbody = document.getElementById('orderItemsTableBody');
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Error loading details: ' + error.message + '</td></tr>';
-                    const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-                    modal.show();
-                });
+                        const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+                        modal.show();
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                        alert('Failed to load order details: ' + error.message);
+                        document.getElementById('orderItemsTableBody').innerHTML = '<tr><td colspan="5" class="text-center">Error loading details: ' + error.message + '</td></tr>';
+                        const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+                        modal.show();
+                    });
+            });
         });
-    });
+    }
 });
 </script>
 </body>

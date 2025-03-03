@@ -2,6 +2,15 @@
 include '../database/database.php'; // Assumes this provides a PDO connection
 session_start();
 
+// Fetch products for the dropdown, including price and stock
+try {
+    $stmt = $conn->prepare("SELECT id, product_name, price, stock FROM products WHERE status = 'active' AND stock > 0");
+    $stmt->execute();
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    die("Error fetching products: " . $e->getMessage());
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     // Ensure PDO connection is available
     if (!isset($conn) || !$conn) {
@@ -39,33 +48,58 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
         }
 
         // Insert into CustomerOrders
-        $sql = "INSERT INTO CustomerOrders (CustomerName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, DocumentPath) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $sql = "INSERT INTO CustomerOrders (CustomerName, OrderDate, TIN, DeliveryDate, PaymentTerms, SubTotal, Discount, Total, DocumentPath, Status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')";
         $stmt = $conn->prepare($sql);
         $stmt->execute([$customer_name, $order_date, $tin, $delivery_date, $payment_terms, $sub_total, $discount, $total, $document_path]);
         $order_id = $conn->lastInsertId();
 
-        // Insert order items
+        // Insert order items and subtract stock
         if (isset($_POST['items']) && is_array($_POST['items'])) {
-            $item_sql = "INSERT INTO CustomerOrderItems (OrderID, ProductName, Quantity, Rate, Amount) 
-                         VALUES (?, ?, ?, ?, ?)";
+            $item_sql = "INSERT INTO CustomerOrderItems (OrderID, ProductID, ProductName, Quantity, Rate, Amount) 
+                         VALUES (?, ?, ?, ?, ?, ?)";
             $item_stmt = $conn->prepare($item_sql);
             
             foreach ($_POST['items'] as $item) {
-                $product_name = $item['product_name'] ?? '';
-                $quantity = $item['quantity'] ?? 0;
-                $rate = $item['rate'] ?? 0.00;
-                $amount = $item['amount'] ?? 0.00;
+                $product_id = $item['product_id'] ?? '';
+                $quantity = (int)($item['quantity'] ?? 0);
+                $rate = (float)($item['rate'] ?? 0.00);
+                $amount = (float)($item['amount'] ?? 0.00);
 
-                if (!empty($product_name) && $quantity > 0 && $rate >= 0) {
-                    $item_stmt->execute([$order_id, $product_name, $quantity, $rate, $amount]);
+                if (!empty($product_id) && $quantity > 0 && $rate >= 0) {
+                    // Fetch ProductName and stock from products table
+                    $product_stmt = $conn->prepare("SELECT product_name, stock FROM products WHERE id = ? AND status = 'active'");
+                    $product_stmt->execute([$product_id]);
+                    $product = $product_stmt->fetch(PDO::FETCH_ASSOC);
+
+                    if ($product === false) {
+                        throw new Exception("Product not found for ID: $product_id");
+                    }
+
+                    $product_name = $product['product_name'];
+                    $available_stock = (int)$product['stock'];
+
+                    if ($available_stock < $quantity) {
+                        throw new Exception("Insufficient stock for Product ID: $product_id. Available: $available_stock, Requested: $quantity");
+                    }
+
+                    // Subtract stock from products table
+                    $stock_update_stmt = $conn->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?");
+                    $stock_update_stmt->execute([$quantity, $product_id, $quantity]);
+
+                    if ($stock_update_stmt->rowCount() === 0) {
+                        throw new Exception("Failed to update stock for Product ID: $product_id. Stock may have been modified concurrently.");
+                    }
+
+                    // Insert the order item
+                    $item_stmt->execute([$order_id, $product_id, $product_name, $quantity, $rate, $amount]);
                 }
             }
         }
 
         // Commit transaction
         $conn->commit();
-        echo "<script>alert('Order saved successfully!'); window.location.href = 'CustomerOrder.php';</script>";
+        echo "<script>alert('Order saved successfully! Stock updated.'); window.location.href = 'CustomerOrder.php';</script>";
         exit;
     } catch (Exception $e) {
         $conn->rollBack();
@@ -94,14 +128,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
             vertical-align: middle;
             text-align: left;
         }
-        .item-table input[type="text"],
+        .item-table select,
         .item-table input[type="number"] {
             width: 80%;
             margin: 0;
             padding: 4px;
         }
-        .item-table .product-name {
-            min-width: 80px;
+        .item-table .product-id {
+            min-width: 200px;
         }
         .item-table .quantity {
             min-width: 80px;
@@ -242,6 +276,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalInput = document.getElementById('totalInput');
     let rowCount = 0;
 
+    // Product options from PHP, including price and stock
+    const products = <?php echo json_encode($products); ?>;
+    let productOptions = '<option value="">Select Product</option>';
+    products.forEach(product => {
+        productOptions += `<option value="${product.id}" data-price="${product.price}" data-stock="${product.stock}">${product.product_name}</option>`;
+    });
+
+    // Product price and stock lookup maps
+    const productPrices = {};
+    const productStocks = {};
+    products.forEach(product => {
+        productPrices[product.id] = parseFloat(product.price);
+        productStocks[product.id] = parseInt(product.stock);
+    });
+
     // Function to calculate and update totals
     function updateTotals() {
         let subTotal = 0;
@@ -262,30 +311,54 @@ document.addEventListener('DOMContentLoaded', function() {
         rowCount++;
         const newRow = document.createElement('tr');
         newRow.innerHTML = `
-            <td><input type="text" class="form-control product-name" name="items[${rowCount}][product_name]" required></td>
+            <td>
+                <select class="form-control product-id" name="items[${rowCount}][product_id]" required>
+                    ${productOptions}
+                </select>
+            </td>
             <td><input type="number" class="form-control quantity" name="items[${rowCount}][quantity]" min="1" required></td>
-            <td><input type="number" class="form-control rate" name="items[${rowCount}][rate]" style="width: 70px;" min="0" step="0.01" required></td>
+            <td><input type="number" class="form-control rate" name="items[${rowCount}][rate]" style="width: 70px;" min="0" step="0.01" readonly></td>
             <td><input type="number" class="form-control amount" name="items[${rowCount}][amount]" style="width: 70px;" readonly></td>
             <td><button type="button" class="btn btn-danger btn-sm remove-row">Remove</button></td>
         `;
         itemTableBody.appendChild(newRow);
 
         // Add event listeners to the new inputs
+        const productSelect = newRow.querySelector('.product-id');
         const quantityInput = newRow.querySelector('.quantity');
         const rateInput = newRow.querySelector('.rate');
         const amountInput = newRow.querySelector('.amount');
         const removeBtn = newRow.querySelector('.remove-row');
 
         function calculateAmount() {
-            const quantity = parseFloat(quantityInput.value) || 0;
+            const quantity = parseInt(quantityInput.value) || 0;
             const rate = parseFloat(rateInput.value) || 0;
             const amount = quantity * rate;
             amountInput.value = amount.toFixed(2);
             updateTotals();
         }
 
-        quantityInput.addEventListener('input', calculateAmount);
-        rateInput.addEventListener('input', calculateAmount);
+        // Set rate and validate stock when product is selected
+        productSelect.addEventListener('change', function() {
+            const productId = this.value;
+            const price = productPrices[productId] || 0;
+            const stock = productStocks[productId] || 0;
+            rateInput.value = price.toFixed(2);
+            quantityInput.max = stock; // Set max quantity based on available stock
+            quantityInput.title = `Max available: ${stock}`;
+            calculateAmount();
+        });
+
+        quantityInput.addEventListener('input', function() {
+            const productId = productSelect.value;
+            const stock = productStocks[productId] || 0;
+            if (parseInt(this.value) > stock) {
+                this.value = stock;
+                alert(`Quantity cannot exceed available stock (${stock}) for this product.`);
+            }
+            calculateAmount();
+        });
+
         removeBtn.addEventListener('click', function() {
             newRow.remove();
             updateTotals();

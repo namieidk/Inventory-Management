@@ -13,6 +13,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
         $quantity = $_POST['quantity'];
         $status = $_POST['status'];
 
+        // Begin transaction for consistency across CustomerOrders and Inventory updates
+        $conn->beginTransaction();
+
+        // Update CustomerOrders table
         $stmt = $conn->prepare("
             UPDATE CustomerOrders 
             SET CustomerName = :contact_person,
@@ -22,7 +26,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
                 Status = :status
             WHERE OrderID = :order_id
         ");
-        
         $stmt->execute([
             ':order_id' => $order_id,
             ':contact_person' => $contact_person,
@@ -32,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
             ':status' => $status
         ]);
 
+        // Update CustomerOrderItems table
         $stmt = $conn->prepare("
             UPDATE CustomerOrderItems 
             SET Quantity = :quantity
@@ -41,8 +45,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
             ':quantity' => $quantity,
             ':order_id' => $order_id
         ]);
-    } catch (PDOException $e) {
-        $error = "Error updating order: " . $e->getMessage();
+
+        // If status changes to "Delivered", update inventory stock
+        if ($status === 'Delivered') {
+            // Fetch all items for this order
+            $stmt = $conn->prepare("
+                SELECT ProductID, Quantity 
+                FROM CustomerOrderItems 
+                WHERE OrderID = :order_id
+            ");
+            $stmt->execute([':order_id' => $order_id]);
+            $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($items as $item) {
+                $product_id = $item['ProductID']; // Assumes ProductID links to products.id
+                $quantity_sold = $item['Quantity'];
+
+                // Update stock in the products table
+                $stmt = $conn->prepare("
+                    UPDATE products 
+                    SET stock = stock - :quantity 
+                    WHERE id = :product_id AND stock >= :quantity
+                ");
+                $stmt->execute([
+                    ':quantity' => $quantity_sold,
+                    ':product_id' => $product_id
+                ]);
+
+                // Check if stock update was successful
+                if ($stmt->rowCount() === 0) {
+                    throw new Exception("Insufficient stock for Product ID: $product_id");
+                }
+            }
+        }
+
+        // Commit transaction
+        $conn->commit();
+
+        echo 'success';
+        exit();
+    } catch (Exception $e) {
+        // Rollback transaction on error
+        $conn->rollBack();
+        header('HTTP/1.1 500 Internal Server Error');
+        echo "Error updating order: " . $e->getMessage();
+        exit();
     }
 }
 
@@ -50,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset($_GET['order_id'])) {
     try {
         $order_id = $_GET['order_id'];
-        // Updated query to match your CustomerOrderItems table
         $stmt = $conn->prepare("
             SELECT 
                 ItemID,
@@ -75,12 +121,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['get_details']) && isset
     }
 }
 
-// Get sorting and filtering parameters
+// Handle AJAX search request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'search') {
+    try {
+        $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+        $order_by = isset($_POST['order_by']) ? $_POST['order_by'] : 'OrderDate';
+        $order_dir = isset($_POST['order_dir']) ? $_POST['order_dir'] : 'DESC';
+        $filter = isset($_POST['filter']) ? $_POST['filter'] : '';
+
+        $query = "
+            SELECT 
+                co.OrderID,
+                co.CustomerName AS ContactPerson,
+                co.OrderDate,
+                co.DeliveryDate,
+                co.Total,
+                co.SubTotal,
+                co.Discount,
+                SUM(coi.Quantity) AS TotalQuantity,
+                co.Status
+            FROM CustomerOrders co
+            LEFT JOIN CustomerOrderItems coi ON co.OrderID = coi.OrderID
+            WHERE 1=1
+        ";
+        
+        $params = [];
+        if (!empty($searchTerm)) {
+            $query .= " AND (co.OrderID LIKE :search 
+                          OR co.CustomerName LIKE :search 
+                          OR co.Status LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        if ($filter) {
+            switch ($filter) {
+                case 'Below ₱1,000':
+                    $query .= " AND co.Total < 1000";
+                    break;
+                case '₱1,000 - ₱5,000':
+                    $query .= " AND co.Total BETWEEN 1000 AND 5000";
+                    break;
+                case '₱5,000 - ₱10,000':
+                    $query .= " AND co.Total BETWEEN 5000 AND 10000";
+                    break;
+                case 'Above ₱10,000':
+                    $query .= " AND co.Total > 10000";
+                    break;
+            }
+        }
+
+        $query .= "
+            GROUP BY co.OrderID, co.CustomerName, co.OrderDate, co.DeliveryDate, co.Total, co.SubTotal, co.Discount, co.Status
+        ";
+
+        $valid_order_columns = ['OrderID', 'CustomerName', 'OrderDate', 'Total', 'Status'];
+        $order_column = in_array($order_by, $valid_order_columns) ? $order_by : 'OrderDate';
+        $order_dir = strtoupper($order_dir) === 'ASC' ? 'ASC' : 'DESC';
+        $query .= " ORDER BY co.$order_column $order_dir";
+
+        $stmt = $conn->prepare($query);
+        $stmt->execute($params);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        header('Content-Type: application/json');
+        echo json_encode($orders);
+        exit();
+    } catch (PDOException $e) {
+        header('Content-Type: application/json');
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['error' => "Database error: " . $e->getMessage()]);
+        exit();
+    }
+}
+
+// Initial page load
 $order_by = $_GET['order_by'] ?? 'OrderDate';
 $order_dir = $_GET['order_dir'] ?? 'DESC';
 $filter = $_GET['filter'] ?? '';
+$searchTerm = $_GET['search'] ?? '';
 
-// Build the base query for orders
 $query = "
     SELECT 
         co.OrderID,
@@ -94,11 +213,18 @@ $query = "
         co.Status
     FROM CustomerOrders co
     LEFT JOIN CustomerOrderItems coi ON co.OrderID = coi.OrderID
+    WHERE 1=1
 ";
 
-// Add WHERE clause for filtering
 $where_clauses = [];
 $params = [];
+if (!empty($searchTerm)) {
+    $where_clauses[] = "(co.OrderID LIKE :search 
+                      OR co.CustomerName LIKE :search 
+                      OR co.Status LIKE :search)";
+    $params[':search'] = "%$searchTerm%";
+}
+
 if ($filter) {
     switch ($filter) {
         case 'Below ₱1,000':
@@ -120,7 +246,6 @@ if (!empty($where_clauses)) {
     $query .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-// Add GROUP BY and ORDER BY
 $query .= "
     GROUP BY co.OrderID, co.CustomerName, co.OrderDate, co.DeliveryDate, co.Total, co.SubTotal, co.Discount, co.Status
 ";
@@ -144,10 +269,11 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard</title>
+    <title>Customer Order Dashboard</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/CustomerOrder.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         .left-sidebar {
             position: fixed;
@@ -267,7 +393,7 @@ try {
     <div class="d-flex justify-content-between mb-3">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" placeholder="Search..." id="searchInput" name="search">
         </div>
         <div>
             <button class="btn btn-dark" id="newProductBtn">New <i class="fa fa-plus"></i></button>
@@ -303,7 +429,7 @@ try {
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="orderTableBody">
             <?php if (isset($error) && empty($orders)): ?>
                 <tr><td colspan="8" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
             <?php elseif (!empty($orders)): ?>
@@ -455,44 +581,132 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebar.addEventListener('click', function(event) {
             event.stopPropagation();
         });
-    } else {
-        console.error('Sidebar or menu button not found');
     }
 
-    // Edit button functionality
-    document.querySelectorAll('.edit-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const orderId = this.getAttribute('data-order-id');
-            const contact = this.getAttribute('data-contact');
-            const orderDate = this.getAttribute('data-date');
-            const deliveryDate = this.getAttribute('data-delivery');
-            const total = this.getAttribute('data-total');
-            const quantity = this.getAttribute('data-quantity');
-            const status = this.getAttribute('data-status');
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const orderBySelect = document.getElementById('orderBySelect');
+    const filterBySelect = document.getElementById('filterBySelect');
+    let searchTimeout;
 
-            document.getElementById('editOrderId').value = orderId;
-            document.getElementById('editContactPerson').value = contact;
-            document.getElementById('editOrderDate').value = orderDate;
-            document.getElementById('editDeliveryDate').value = deliveryDate;
-            document.getElementById('editTotal').value = total;
-            document.getElementById('editQuantity').value = quantity;
-            document.getElementById('editStatus').value = status;
+    function updateTable() {
+        const searchTerm = searchInput.value.trim();
+        const orderValue = orderBySelect.value.split('|');
+        const orderBy = orderValue[0] || 'OrderDate';
+        const orderDir = orderValue[1] || 'DESC';
+        const filter = filterBySelect.value;
 
-            const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
-            modal.show();
+        $.ajax({
+            url: 'CustomerOrder.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                order_by: orderBy,
+                order_dir: orderDir,
+                filter: filter
+            },
+            success: function(orders) {
+                console.log('Orders received:', orders); // Debug log
+                const tbody = document.getElementById('orderTableBody');
+                tbody.innerHTML = '';
+
+                if (orders.error) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">${orders.error}</td></tr>`;
+                    return;
+                }
+
+                if (orders.length > 0) {
+                    orders.forEach(order => {
+                        const row = `
+                            <tr>
+                                <td>${order.OrderID}</td>
+                                <td>${order.ContactPerson || ''}</td>
+                                <td><span class="order-link" data-order-id="${order.OrderID}">${order.OrderID}</span></td>
+                                <td>${order.TotalQuantity || 0}</td>
+                                <td>₱${parseFloat(order.Total || 0).toFixed(2)}</td>
+                                <td>${order.Status || ''}</td>
+                                <td>${order.DeliveryDate || ''}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary edit-btn" 
+                                            data-order-id="${order.OrderID}"
+                                            data-contact="${order.ContactPerson}"
+                                            data-date="${order.OrderDate}"
+                                            data-delivery="${order.DeliveryDate}"
+                                            data-total="${order.Total}"
+                                            data-quantity="${order.TotalQuantity}"
+                                            data-status="${order.Status}"
+                                            title="Edit Order">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No customer orders available. Input new order.</td></tr>';
+                }
+
+                // Reattach event listeners after updating table
+                attachEditButtonListeners();
+                attachOrderLinkListeners();
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('orderTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading orders</td></tr>';
+            }
         });
+    }
+
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
     });
 
-    // Handle form submission with temporary success message
+    // Sorting and filtering
+    orderBySelect.addEventListener('change', updateTable);
+    filterBySelect.addEventListener('change', updateTable);
+
+    // Edit button functionality
+    function attachEditButtonListeners() {
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                const contact = this.getAttribute('data-contact');
+                const orderDate = this.getAttribute('data-date');
+                const deliveryDate = this.getAttribute('data-delivery');
+                const total = this.getAttribute('data-total');
+                const quantity = this.getAttribute('data-quantity');
+                const status = this.getAttribute('data-status');
+
+                document.getElementById('editOrderId').value = orderId;
+                document.getElementById('editContactPerson').value = contact;
+                document.getElementById('editOrderDate').value = orderDate;
+                document.getElementById('editDeliveryDate').value = deliveryDate;
+                document.getElementById('editTotal').value = total;
+                document.getElementById('editQuantity').value = quantity;
+                document.getElementById('editStatus').value = status;
+
+                const modal = new bootstrap.Modal(document.getElementById('editOrderModal'));
+                modal.show();
+            });
+        });
+    }
+
+    // Handle form submission
     document.getElementById('editOrderForm').addEventListener('submit', function(e) {
         e.preventDefault();
         
-        fetch(window.location.href, {
+        fetch('CustomerOrder.php', {
             method: 'POST',
             body: new FormData(this)
         })
-        .then(response => {
-            if (response.ok) {
+        .then(response => response.text())
+        .then(data => {
+            if (data === 'success') {
                 const notification = document.createElement('div');
                 notification.className = 'success-notification alert alert-success alert-dismissible fade show';
                 notification.innerHTML = `
@@ -504,10 +718,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('editOrderModal'));
                 modal.hide();
 
-                setTimeout(() => location.reload(), 1500);
                 setTimeout(() => notification.remove(), 3000);
+                updateTable(); // Refresh table without reload
             } else {
-                throw new Error('Update failed');
+                throw new Error(data);
             }
         })
         .catch(error => {
@@ -516,93 +730,70 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Handle sorting and filtering
-    const orderBySelect = document.getElementById('orderBySelect');
-    const filterBySelect = document.getElementById('filterBySelect');
+    // Order details link functionality
+    function attachOrderLinkListeners() {
+        document.querySelectorAll('.order-link').forEach(link => {
+            link.addEventListener('click', function() {
+                const orderId = this.getAttribute('data-order-id');
+                document.getElementById('detailsOrderId').textContent = orderId;
 
-    function updateTable() {
-        const orderValue = orderBySelect.value.split('|');
-        const filterValue = filterBySelect.value;
-        
-        const params = new URLSearchParams(window.location.search);
-        if (orderValue[0]) {
-            params.set('order_by', orderValue[0]);
-            params.set('order_dir', orderValue[1] || 'ASC');
-        } else {
-            params.delete('order_by');
-            params.delete('order_dir');
-        }
-        if (filterValue) {
-            params.set('filter', filterValue);
-        } else {
-            params.delete('filter');
-        }
+                const urlParams = new URLSearchParams();
+                urlParams.set('get_details', '1');
+                urlParams.set('order_id', orderId);
+                const fetchUrl = `${window.location.pathname}?${urlParams.toString()}`;
 
-        const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-        window.history.pushState({}, '', newUrl);
-        location.reload();
+                fetch(fetchUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (!data.success) {
+                            throw new Error(data.error || 'Failed to fetch order details');
+                        }
+
+                        const items = data.items;
+                        const tbody = document.getElementById('orderItemsTableBody');
+                        tbody.innerHTML = '';
+
+                        if (items.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No items found for this order</td></tr>';
+                        } else {
+                            items.forEach(item => {
+                                const row = `
+                                    <tr>
+                                        <td>${item.ItemID || 'N/A'}</td>
+                                        <td>${item.ProductName || 'N/A'}</td>
+                                        <td>${item.Quantity || 0}</td>
+                                        <td>₱${item.Rate ? parseFloat(item.Rate).toFixed(2) : '0.00'}</td>
+                                        <td>₱${item.Amount ? parseFloat(item.Amount).toFixed(2) : '0.00'}</td>
+                                    </tr>
+                                `;
+                                tbody.innerHTML += row;
+                            });
+                        }
+
+                        const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+                        modal.show();
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                        alert('Failed to load order details: ' + error.message);
+                        const tbody = document.getElementById('orderItemsTableBody');
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Error loading details: ' + error.message + '</td></tr>';
+                        const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+                        modal.show();
+                    });
+            });
+        });
     }
 
-    orderBySelect.addEventListener('change', updateTable);
-    filterBySelect.addEventListener('change', updateTable);
-
-    // Handle order number click for details
-    document.querySelectorAll('.order-link').forEach(link => {
-        link.addEventListener('click', function() {
-            const orderId = this.getAttribute('data-order-id');
-            document.getElementById('detailsOrderId').textContent = orderId;
-
-            const urlParams = new URLSearchParams(window.location.search);
-            urlParams.set('get_details', '1');
-            urlParams.set('order_id', orderId);
-            const fetchUrl = `${window.location.pathname}?${urlParams.toString()}`;
-
-            fetch(fetchUrl)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!data.success) {
-                        throw new Error(data.error || 'Failed to fetch order details');
-                    }
-
-                    const items = data.items;
-                    const tbody = document.getElementById('orderItemsTableBody');
-                    tbody.innerHTML = ''; // Clear existing rows
-
-                    if (items.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No items found for this order</td></tr>';
-                    } else {
-                        items.forEach(item => {
-                            const row = `
-                                <tr>
-                                    <td>${item.ItemID || 'N/A'}</td>
-                                    <td>${item.ProductName || 'N/A'}</td>
-                                    <td>${item.Quantity || 0}</td>
-                                    <td>₱${item.Rate ? parseFloat(item.Rate).toFixed(2) : '0.00'}</td>
-                                    <td>₱${item.Amount ? parseFloat(item.Amount).toFixed(2) : '0.00'}</td>
-                                </tr>
-                            `;
-                            tbody.innerHTML += row;
-                        });
-                    }
-
-                    const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-                    modal.show();
-                })
-                .catch(error => {
-                    console.error('Fetch error:', error);
-                    alert('Failed to load order details: ' + error.message);
-                    const tbody = document.getElementById('orderItemsTableBody');
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Error loading details: ' + error.message + '</td></tr>';
-                    const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
-                    modal.show();
-                });
-        });
-    });
+    // Initial table load and event listeners
+    updateTable();
+    attachEditButtonListeners();
+    attachOrderLinkListeners();
 });
 </script>
 </body>

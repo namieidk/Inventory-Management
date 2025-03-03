@@ -2,6 +2,14 @@
 include '../database/database.php';
 session_start();
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Define $orderBy and $filterBy globally with default empty values
+$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
+$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['supplier_id'])) {
         $supplier_id = $_POST['supplier_id'];
@@ -46,12 +54,89 @@ if (isset($_GET['supplier_id'])) {
     exit;
 }
 
-try {
-    $stmt = $conn->prepare("SELECT * FROM Supplier");
-    $stmt->execute();
-    $suppliers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Database error: " . $e->getMessage();
+// Unified fetch function for suppliers
+function fetchSuppliers($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+    try {
+        $sql = "SELECT * FROM Supplier WHERE 1=1";
+        $params = [];
+        $orderClause = " ORDER BY SupplierID DESC"; // Default order
+
+        // Search functionality
+        if (!empty($searchTerm)) {
+            $sql .= " AND (CompanyName LIKE :search 
+                        OR Phone LIKE :search 
+                        OR ContactPerson LIKE :search 
+                        OR Email LIKE :search 
+                        OR SupplierID LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        // Filter logic (example: filter by PaymentTerms)
+        switch ($filterBy) {
+            case 'payment-net-30':
+                $sql .= " AND PaymentTerms = 'Net 30'";
+                break;
+            case 'payment-net-60':
+                $sql .= " AND PaymentTerms = 'Net 60'";
+                break;
+            case 'has-email':
+                $sql .= " AND Email IS NOT NULL AND Email != ''";
+                break;
+            case 'no-email':
+                $sql .= " AND (Email IS NULL OR Email = '')";
+                break;
+            default:
+                break;
+        }
+
+        // Order logic
+        switch ($orderBy) {
+            case 'name-asc':
+                $orderClause = " ORDER BY CompanyName ASC";
+                break;
+            case 'name-desc':
+                $orderClause = " ORDER BY CompanyName DESC";
+                break;
+            case 'newest':
+                $orderClause = " ORDER BY SupplierID DESC";
+                break;
+            case 'oldest':
+                $orderClause = " ORDER BY SupplierID ASC";
+                break;
+            default:
+                break;
+        }
+
+        $sql .= $orderClause;
+
+        $stmt = $conn->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return ['error' => "Database error: " . $e->getMessage()];
+    }
+}
+
+// Handle AJAX search request
+if (isset($_POST['action']) && $_POST['action'] === 'search') {
+    $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+    $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+    $suppliers = fetchSuppliers($conn, $searchTerm, $orderBy, $filterBy);
+    header('Content-Type: application/json');
+    echo json_encode($suppliers);
+    exit;
+}
+
+// Initial page load
+$searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+$suppliers = fetchSuppliers($conn, $searchTerm, $orderBy, $filterBy);
+if (isset($suppliers['error'])) {
+    $error = $suppliers['error'];
+    $suppliers = [];
 }
 ?>
 
@@ -60,7 +145,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard</title>
+    <title>Supplier Dashboard</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/supplier.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
@@ -138,6 +223,11 @@ try {
         .modal-lg-custom {
             max-width: 900px;
         }
+        select.btn.btn-outline-secondary {
+            appearance: auto;
+            padding: 5px;
+            min-width: 150px;
+        }
     </style>
 </head>
 <body>
@@ -165,7 +255,7 @@ try {
         <li class="dropdown">
             <i class="fa fa-store"></i><span> Admin</span><i class="fa fa-chevron-down toggle-btn"></i>
             <ul class="submenu">
-                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management </a></li>
+                <li><a href="UserManagement.php" style="color: white; text-decoration: none;">User Management</a></li>
                 <li><a href="Employees.php" style="color: white; text-decoration: none;">Employees</a></li>
                 <li><a href="AuditLogs.php" style="color: white; text-decoration: none;">Audit Logs</a></li>
             </ul>
@@ -187,30 +277,25 @@ try {
     <div class="controls-container">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" id="searchInput" name="search" placeholder="Search..." value="<?php echo htmlspecialchars($searchTerm); ?>">
         </div>
         <button class="btn btn-dark mr-2" id="newProductBtn" style="margin-right: 10px;">New <i class="fa fa-plus"></i></button>
-        <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;">
-            <option>Order By</option>
-            <option>Ascending (A → Z)</option>
-            <option>Descending (Z → A)</option>
-            <option>Low Price (Ascending)</option>
-            <option>High Price (Descending)</option>
-            <option>Newest</option>
-            <option>Oldest</option>
-            <option>Best Seller</option>
-        </select>
-        <select class="btn btn-outline-secondary">
-             <option>Filtered By</option>
-            <option>Product Type</option>
-            <option>Product Supplier</option>
-            <option>Below ₱1,000</option>
-            <option>₱1,000 - ₱5,000</option>
-            <option>₱5,000 - ₱10,000</option>
-            <option>Above ₱10,000</option>
-            <option>In-Stock</option>
-            <option>Out of Stock</option>
-        </select>
+        <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
+            <select class="btn btn-outline-secondary mr-2" style="margin-right: 10px;" name="orderBy" id="orderBySelect" onchange="updateTable()">
+                <option value="">Order By</option>
+                <option value="name-asc" <?php if ($orderBy === 'name-asc') echo 'selected'; ?>>Ascending (A → Z)</option>
+                <option value="name-desc" <?php if ($orderBy === 'name-desc') echo 'selected'; ?>>Descending (Z → A)</option>
+                <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
+                <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
+            </select>
+            <select class="btn btn-outline-secondary" name="filterBy" id="filterBySelect" onchange="updateTable()">
+                <option value="">Filtered By</option>
+                <option value="payment-net-30" <?php if ($filterBy === 'payment-net-30') echo 'selected'; ?>>Payment Terms: Net 30</option>
+                <option value="payment-net-60" <?php if ($filterBy === 'payment-net-60') echo 'selected'; ?>>Payment Terms: Net 60</option>
+                <option value="has-email" <?php if ($filterBy === 'has-email') echo 'selected'; ?>>Has Email</option>
+                <option value="no-email" <?php if ($filterBy === 'no-email') echo 'selected'; ?>>No Email</option>
+            </select>
+        </form>
     </div>
 
     <div class="table-container">
@@ -230,7 +315,7 @@ try {
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="supplierTableBody">
                 <?php if (isset($error)): ?>
                     <tr><td colspan="11" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
                 <?php elseif (!empty($suppliers)): ?>
@@ -274,8 +359,8 @@ try {
                         <input type="hidden" id="editSupplierId" name="supplier_id">
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label for="editCompanyName">Company Name</label>  // Changed from First Name
-                                <input type="text" class="form-control" id="editCompanyName" name="company_name" required>  // Changed from first_name
+                                <label for="editCompanyName">Company Name</label>
+                                <input type="text" class="form-control" id="editCompanyName" name="company_name" required>
                             </div>
                             <div class="col-md-6 form-group">
                                 <label for="editPhone">Phone</label>
@@ -331,18 +416,7 @@ try {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var dropdowns = document.querySelectorAll('.dropdown');
-    dropdowns.forEach(function(dropdown) {
-        var toggleBtn = dropdown.querySelector('.toggle-btn');
-        toggleBtn.addEventListener('click', function() {
-            dropdown.classList.toggle('active');
-        });
-    });
-
-    document.getElementById('newProductBtn').addEventListener('click', function() {
-        window.location.href = 'NewSupplier.php';
-    });
-
+    // Sidebar toggle functionality
     const menuToggleBtn = document.getElementById('menuToggleBtn');
     const sidebar = document.querySelector('.left-sidebar');
 
@@ -363,10 +437,23 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebar.addEventListener('click', function(event) {
             event.stopPropagation();
         });
-    } else {
-        console.error('Sidebar or menu button not found');
     }
 
+    // Dropdown toggle
+    var dropdowns = document.querySelectorAll('.dropdown');
+    dropdowns.forEach(function(dropdown) {
+        var toggleBtn = dropdown.querySelector('.toggle-btn');
+        toggleBtn.addEventListener('click', function() {
+            dropdown.classList.toggle('active');
+        });
+    });
+
+    // New Supplier button
+    document.getElementById('newProductBtn').addEventListener('click', function() {
+        window.location.href = 'NewSupplier.php';
+    });
+
+    // Edit Supplier Modal
     $('#editSupplierModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
         var supplierId = button.data('supplier-id');
@@ -401,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data === 'success') {
                 alert('Supplier updated successfully');
                 $('#editSupplierModal').modal('hide');
-                location.reload();
+                updateTable(); // Refresh table after edit
             } else {
                 alert('Error updating supplier: ' + data);
             }
@@ -411,6 +498,95 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Error updating supplier');
         });
     });
+
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    let searchTimeout;
+
+    function updateTable() {
+        const searchTerm = searchInput.value.trim();
+        const orderBy = document.querySelector('select[name="orderBy"]').value;
+        const filterBy = document.querySelector('select[name="filterBy"]').value;
+
+        console.log('Updating table with:', { searchTerm, orderBy, filterBy }); // Debug
+
+        $.ajax({
+            url: 'supplier.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                orderBy: orderBy,
+                filterBy: filterBy
+            },
+            success: function(suppliers) {
+                console.log('Suppliers received:', suppliers); // Debug log
+                const tbody = document.getElementById('supplierTableBody');
+                tbody.innerHTML = '';
+
+                if (suppliers.error) {
+                    tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger">${suppliers.error}</td></tr>`;
+                    return;
+                }
+
+                if (suppliers.length > 0) {
+                    suppliers.forEach(supplier => {
+                        const row = `
+                            <tr>
+                                <td>${supplier.SupplierID}</td>
+                                <td>${supplier.CompanyName}</td>
+                                <td>${supplier.Phone || ''}</td>
+                                <td>${supplier.ContactPerson || ''}</td>
+                                <td>${supplier.ContactPhone || ''}</td>
+                                <td>${supplier.Email || ''}</td>
+                                <td>${supplier.PaymentTerms || ''}</td>
+                                <td>${supplier.Address1 || ''}</td>
+                                <td>${supplier.Address2 || ''}</td>
+                                <td>${supplier.Remarks || ''}</td>
+                                <td>
+                                    <button class="btn btn-warning btn-sm me-1" data-supplier-id="${supplier.SupplierID}" data-toggle="modal" data-target="#editSupplierModal">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No supplier available. Input new supplier.</td></tr>';
+                }
+
+                // Update the select elements to reflect current values
+                document.querySelector('select[name="orderBy"]').value = orderBy;
+                document.querySelector('select[name="filterBy"]').value = filterBy;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('supplierTableBody').innerHTML = '<tr><td colspan="11" class="text-center text-danger">Error loading suppliers</td></tr>';
+            }
+        });
+    }
+
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
+    });
+
+    // Ensure dropdowns trigger table updates
+    document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
+        console.log('Order By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    document.querySelector('select[name="filterBy"]').addEventListener('change', function() {
+        console.log('Filter By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    // Initial table load
+    updateTable();
 });
 </script>
 </body>

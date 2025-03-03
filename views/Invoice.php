@@ -69,7 +69,108 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save'])) {
     }
 }
 
-// Fetch invoice data from database with item count
+// AJAX handler for fetching invoice items
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['get_items'])) {
+    $invoice_id = $_POST['invoice_id'];
+    try {
+        $sql = "SELECT product, quantity, description, unit_price, amount 
+                FROM InvoiceItems 
+                WHERE invoice_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$invoice_id]);
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode($items);
+    } catch (Exception $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// AJAX handler for searching invoices
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['action'] === 'search') {
+    try {
+        $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+        $orderBy = isset($_POST['order_by']) ? $_POST['order_by'] : 'date_desc';
+        $filterBy = isset($_POST['filter_by']) ? $_POST['filter_by'] : '';
+
+        $sql = "SELECT 
+                    i.id,
+                    i.payment_type,
+                    i.client_name,
+                    i.total_amount,
+                    i.payment_terms,
+                    i.date,
+                    COUNT(ii.id) as item_count
+                FROM Invoice i
+                LEFT JOIN InvoiceItems ii ON i.id = ii.invoice_id
+                WHERE 1=1";
+        $params = [];
+
+        if (!empty($searchTerm)) {
+            $sql .= " AND (i.id LIKE :search 
+                        OR i.client_name LIKE :search 
+                        OR i.payment_type LIKE :search 
+                        OR i.payment_terms LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        if ($filterBy) {
+            switch ($filterBy) {
+                case 'Below ₱1,000':
+                    $sql .= " AND i.total_amount < 1000";
+                    break;
+                case '₱5,000 - ₱10,000':
+                    $sql .= " AND i.total_amount BETWEEN 5000 AND 10000";
+                    break;
+                case 'Above ₱10,000':
+                    $sql .= " AND i.total_amount > 10000";
+                    break;
+            }
+        }
+
+        $sql .= " GROUP BY i.id, i.payment_type, i.client_name, i.total_amount, i.payment_terms, i.date";
+
+        if ($orderBy) {
+            switch ($orderBy) {
+                case 'client_asc':
+                    $sql .= " ORDER BY i.client_name ASC";
+                    break;
+                case 'client_desc':
+                    $sql .= " ORDER BY i.client_name DESC";
+                    break;
+                case 'amount_asc':
+                    $sql .= " ORDER BY i.total_amount ASC";
+                    break;
+                case 'amount_desc':
+                    $sql .= " ORDER BY i.total_amount DESC";
+                    break;
+                case 'date_desc':
+                    $sql .= " ORDER BY i.date DESC";
+                    break;
+                case 'date_asc':
+                    $sql .= " ORDER BY i.date ASC";
+                    break;
+                default:
+                    $sql .= " ORDER BY i.date DESC";
+            }
+        }
+
+        $stmt = $conn->prepare($sql);
+        $stmt->execute($params);
+        $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        header('Content-Type: application/json');
+        echo json_encode($invoices);
+        exit;
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        header('HTTP/1.1 500 Internal Server Error');
+        echo json_encode(['error' => $e->getMessage()]);
+        exit;
+    }
+}
+
+// Fetch invoice data from database with item count for initial load
 try {
     $sql = "SELECT 
                 i.id,
@@ -90,23 +191,6 @@ try {
     echo "<script>alert('Error fetching invoices: " . addslashes($e->getMessage()) . "');</script>";
     $invoices = [];
 }
-
-// AJAX handler for fetching invoice items
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['get_items'])) {
-    $invoice_id = $_POST['invoice_id'];
-    try {
-        $sql = "SELECT product, quantity, description, unit_price, amount 
-                FROM InvoiceItems 
-                WHERE invoice_id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([$invoice_id]);
-        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        echo json_encode($items);
-    } catch (Exception $e) {
-        echo json_encode(['error' => $e->getMessage()]);
-    }
-    exit;
-}
 ?>
 
 <!DOCTYPE html>
@@ -114,10 +198,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['get_items'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard</title>
+    <title>Invoice Dashboard</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/Invoice.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         .header-row {
             display: flex;
@@ -222,35 +307,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['get_items'])) {
     <div class="header-row">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" placeholder="Search..." id="searchInput" name="search">
         </div>
         <div class="action-buttons">
             <button class="btn btn-primary" id="newBtn">New <i class="fas fa-plus"></i></button>
         </div>
         <div class="select-container">
-            <select class="btn btn-outline-secondary">
-                <option>Order By</option>
-                <option>Ascending (A → Z)</option>
-                <option>Descending (Z → A)</option>
-                <option>Low Price (Ascending)</option>
-                <option>High Price (Descending)</option>
-                <option>Newest</option>
-                <option>Oldest</option>
-                <option>Best Seller</option>
+            <select class="btn btn-outline-secondary" id="orderBySelect">
+                <option value="">Order By</option>
+                <option value="client_asc">Ascending (A → Z)</option>
+                <option value="client_desc">Descending (Z → A)</option>
+                <option value="amount_asc">Low Price (Ascending)</option>
+                <option value="amount_desc">High Price (Descending)</option>
+                <option value="date_desc">Newest</option>
+                <option value="date_asc">Oldest</option>
             </select>
-            <select class="btn btn-outline-secondary">
-                <option>Product Type</option>
-                <option>Product Supplier</option>
-                <option>Below ₱1,000</option>
-                <option>₱5,000 - ₱10,000</option>
-                <option>Above ₱10,000</option>
-                <option>In-Stock</option>
-                <option>Out of Stock</option>
+            <select class="btn btn-outline-secondary" id="filterBySelect">
+                <option value="">Filter By</option>
+                <option value="Below ₱1,000">Below ₱1,000</option>
+                <option value="₱5,000 - ₱10,000">₱5,000 - ₱10,000</option>
+                <option value="Above ₱10,000">Above ₱10,000</option>
             </select>
         </div>
     </div>
 
-    <table class="table table-striped table-hover">
+    <table class="table table-striped table-hover" id="invoiceTable">
         <thead>
             <tr>
                 <th>Invoice#</th>
@@ -262,7 +343,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['get_items'])) {
                 <th>Date</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="invoiceTableBody">
             <?php if (empty($invoices)): ?>
                 <tr>
                     <td colspan="7" class="text-center text-muted">No invoice available. Input new invoice.</td>
@@ -453,13 +534,86 @@ document.addEventListener('DOMContentLoaded', function() {
         invoiceItemCount++;
     });
 
-    // Handle clicking Order# to show items
-    document.querySelectorAll('.order-link').forEach(link => {
-        link.addEventListener('click', function() {
-            const invoiceId = this.getAttribute('data-invoice-id');
-            fetchItems(invoiceId);
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const orderBySelect = document.getElementById('orderBySelect');
+    const filterBySelect = document.getElementById('filterBySelect');
+    let searchTimeout;
+
+    function updateTable() {
+        const searchTerm = searchInput.value.trim();
+        const orderBy = orderBySelect.value;
+        const filterBy = filterBySelect.value;
+
+        $.ajax({
+            url: 'Invoice.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                order_by: orderBy,
+                filter_by: filterBy
+            },
+            success: function(invoices) {
+                console.log('Invoices received:', invoices); // Debug log
+                const tbody = document.getElementById('invoiceTableBody');
+                tbody.innerHTML = '';
+
+                if (invoices.error) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${invoices.error}</td></tr>`;
+                    return;
+                }
+
+                if (invoices.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No invoice available. Input new invoice.</td></tr>';
+                    return;
+                }
+
+                invoices.forEach(invoice => {
+                    const row = `
+                        <tr>
+                            <td>${invoice.id}</td>
+                            <td><span class="order-link" data-invoice-id="${invoice.id}" data-bs-toggle="modal" data-bs-target="#itemsModal">${invoice.item_count}</span></td>
+                            <td>${invoice.payment_type || ''}</td>
+                            <td>${invoice.client_name || ''}</td>
+                            <td>${parseFloat(invoice.total_amount || 0).toFixed(2)}</td>
+                            <td>${invoice.payment_terms || ''}</td>
+                            <td>${invoice.date || ''}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+
+                // Reattach order link listeners
+                attachOrderLinkListeners();
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('invoiceTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading invoices</td></tr>';
+            }
         });
+    }
+
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
     });
+
+    // Sorting and filtering listeners
+    orderBySelect.addEventListener('change', updateTable);
+    filterBySelect.addEventListener('change', updateTable);
+
+    // Handle clicking Order# to show items
+    function attachOrderLinkListeners() {
+        document.querySelectorAll('.order-link').forEach(link => {
+            link.addEventListener('click', function() {
+                const invoiceId = this.getAttribute('data-invoice-id');
+                fetchItems(invoiceId);
+            });
+        });
+    }
 
     function fetchItems(invoiceId) {
         fetch('', {
@@ -488,10 +642,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${item.product ? item.product : ''}</td>
-                    <td>${item.quantity}</td>
+                    <td>${item.quantity || 0}</td>
                     <td>${item.description ? item.description : ''}</td>
-                    <td>${parseFloat(item.unit_price).toFixed(2)}</td>
-                    <td>${parseFloat(item.amount).toFixed(2)}</td>
+                    <td>${parseFloat(item.unit_price || 0).toFixed(2)}</td>
+                    <td>${parseFloat(item.amount || 0).toFixed(2)}</td>
                 `;
                 tbody.appendChild(row);
             });
@@ -501,6 +655,10 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('itemsTableBody').innerHTML = '<tr><td colspan="5" class="text-center">Error loading items.</td></tr>';
         });
     }
+
+    // Initial table load and event listeners
+    updateTable();
+    attachOrderLinkListeners();
 });
 </script>
 </body>

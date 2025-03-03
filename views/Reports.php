@@ -1,21 +1,5 @@
 <?php
- include '../database/database.php';
-$sql_create_orders = "
-    CREATE TABLE IF NOT EXISTS CustomerOrders (
-        OrderID INT PRIMARY KEY AUTO_INCREMENT,
-        OrderDate DATE NOT NULL,
-        Status ENUM('Pending', 'Shipped', 'Delivered', 'Cancelled') NOT NULL
-    )";
-$sql_create_items = "
-    CREATE TABLE IF NOT EXISTS CustomerOrderItems (
-        ItemID INT PRIMARY KEY AUTO_INCREMENT,
-        OrderID INT NOT NULL,
-        ProductName VARCHAR(255) NOT NULL,
-        Quantity INT NOT NULL,
-        Rate DECIMAL(10, 2) NOT NULL,
-        Amount DECIMAL(10, 2) NOT NULL,
-        FOREIGN KEY (OrderID) REFERENCES CustomerOrders(OrderID) ON DELETE CASCADE
-    )";
+include '../database/database.php';
 
 // Handle sales report fetch
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['CONTENT_TYPE']) && $_SERVER['CONTENT_TYPE'] === 'application/json') {
@@ -43,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SERVER['CONTENT_TYPE']) && 
             GROUP BY coi.ProductName
         ";
         
-        $stmt = $db->prepare($sql);
+        $stmt = $conn->prepare($sql);
         $stmt->execute([':startDate' => $startDate, ':endDate' => $endDate]);
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -68,29 +52,25 @@ ob_end_flush();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Dashboard - Reports</title>
+    <title>Inventory Dashboard - Sales Reports</title>
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/Reports.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
     <style>
-        .report-buttons { margin-bottom: 20px; }
-        .report-form {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+        .date-inputs {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: nowrap;
+            flex-direction: row; /* Side-by-side inputs */
+            gap: 15px; /* Space between inputs */
+            margin-bottom: 20px;
         }
-        .report-form .form-group {
-            margin-right: 15px;
+        .date-inputs .form-group {
             flex: 1;
+            display: flex;
+            flex-direction: column;
         }
-        .report-form .form-group:last-child { margin-right: 0; }
-        .date-inputs { display: flex; flex-direction: column; }
-        .date-inputs input { margin-bottom: 5px; }
+        .date-inputs input {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -132,38 +112,18 @@ ob_end_flush();
 </div>
 
 <div class="main-content">
-    <h1>Reports</h1>
-    <div class="report-buttons">
-        <button class="btn btn-primary mr-2" id="salesReportBtn">Sales Report</button>
-        <button class="btn btn-primary" id="inventoryReportBtn">Inventory Report</button>
-    </div>
+    <h1>Sales Reports</h1>
 
-    <form class="report-form" id="reportFilterForm">
+    <div class="date-inputs">
         <div class="form-group">
-            <label for="reportType">Report Type</label>
-            <select class="form-control" id="reportType" name="reportType">
-                <option value="">Select Type</option>
-                <option value="sales">Sales</option>
-                <option value="inventory">Inventory</option>
-            </select>
+            <label for="dateRangeStart">Start Date</label>
+            <input type="text" class="form-control" id="dateRangeStart" name="dateRangeStart" placeholder="DD/MM/YYYY">
         </div>
         <div class="form-group">
-            <label for="measure">Measure</label>
-            <select class="form-control" id="measure" name="measure">
-                <option value="">Select Measure</option>
-                <option value="total">Total</option>
-                <option value="average">Average</option>
-                <option value="count">Count</option>
-            </select>
+            <label for="dateRangeEnd">End Date</label>
+            <input type="text" class="form-control" id="dateRangeEnd" name="dateRangeEnd" placeholder="DD/MM/YYYY">
         </div>
-        <div class="form-group">
-            <label>Date Range</label>
-            <div class="date-inputs">
-                <input type="text" class="form-control" id="dateRangeStart" name="dateRangeStart" placeholder="DD/MM/YYYY">
-                <input type="text" class="form-control" id="dateRangeEnd" name="dateRangeEnd" placeholder="DD/MM/YYYY">
-            </div>
-        </div>
-    </form>
+    </div>
 
     <table class="table table-striped table-hover" id="reportTable">
         <thead id="reportTableHead">
@@ -177,7 +137,7 @@ ob_end_flush();
         </thead>
         <tbody id="reportTableBody">
             <tr>
-                <td colspan="5" class="text-center text-muted">No reports available. Click a report button to view.</td>
+                <td colspan="5" class="text-center text-muted">Sales report will load automatically. Adjust date range if needed.</td>
             </tr>
         </tbody>
     </table>
@@ -193,20 +153,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    const salesReportBtn = document.getElementById('salesReportBtn');
-    const inventoryReportBtn = document.getElementById('inventoryReportBtn');
     const dateRangeStartInput = document.getElementById('dateRangeStart');
     const dateRangeEndInput = document.getElementById('dateRangeEnd');
     const tbody = document.getElementById('reportTableBody');
+    let searchTimeout;
 
-    salesReportBtn.addEventListener('click', function() {
-        fetchSalesReport();
-    });
-
-    inventoryReportBtn.addEventListener('click', function() {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Inventory report not implemented yet.</td></tr>';
-    });
-
+    // Function to fetch sales report
     function fetchSalesReport() {
         let start = dateRangeStartInput.value;
         let end = dateRangeEndInput.value;
@@ -217,6 +169,8 @@ document.addEventListener('DOMContentLoaded', function() {
             startDate.setDate(endDate.getDate() - 30);
             start = formatDate(startDate);
             end = formatDate(endDate);
+            dateRangeStartInput.value = start;
+            dateRangeEndInput.value = end;
         }
 
         const startDb = parseDate(start);
@@ -294,6 +248,20 @@ document.addEventListener('DOMContentLoaded', function() {
             tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Error loading sales data: ${error.message}</td></tr>`;
         });
     }
+
+    // Debounced fetch on date input change
+    dateRangeStartInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(fetchSalesReport, 500); // 500ms debounce
+    });
+
+    dateRangeEndInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(fetchSalesReport, 500); // 500ms debounce
+    });
+
+    // Initial fetch on page load
+    fetchSalesReport();
 
     function formatDate(date) {
         const day = String(date.getDate()).padStart(2, '0');

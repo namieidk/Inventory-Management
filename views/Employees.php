@@ -1,8 +1,16 @@
 <?php
 include '../database/database.php';
 
-// Only process POST requests for form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Define $orderBy and $filterBy globally with default empty values
+$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : (isset($_GET['orderBy']) ? $_GET['orderBy'] : '');
+$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : (isset($_GET['filterBy']) ? $_GET['filterBy'] : '');
+
+// Only process POST requests for form submission (saving new employee)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['firstname'])) {
     header('Content-Type: application/json'); // Set JSON header for AJAX response
     
     try {
@@ -27,14 +35,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Query to fetch all employees for display
-try {
-    $stmt = $conn->prepare("SELECT * FROM employees");
-    $stmt->execute();
-    $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch(PDOException $e) {
-    $employees = []; // Empty array if query fails
-    echo "<script>console.error('Error fetching employees: " . $e->getMessage() . "');</script>";
+// Unified fetch function for employees
+function fetchEmployees($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+    try {
+        $sql = "SELECT * FROM employees WHERE 1=1";
+        $params = [];
+        $orderClause = " ORDER BY employee_id DESC"; // Default order
+
+        // Search functionality
+        if (!empty($searchTerm)) {
+            $sql .= " AND (employee_id LIKE :search 
+                        OR firstname LIKE :search 
+                        OR lastname LIKE :search 
+                        OR email LIKE :search 
+                        OR job_title LIKE :search 
+                        OR phone LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        // Filter logic
+        switch ($filterBy) {
+            case 'job-admin':
+                $sql .= " AND job_title = 'Admin'";
+                break;
+            case 'job-manager':
+                $sql .= " AND job_title = 'Manager'";
+                break;
+            case 'age-18-30':
+                $sql .= " AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 18 AND 30";
+                break;
+            case 'age-31-50':
+                $sql .= " AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) BETWEEN 31 AND 50";
+                break;
+            case 'age-above-50':
+                $sql .= " AND TIMESTAMPDIFF(YEAR, birth_date, CURDATE()) > 50";
+                break;
+            case 'has-email':
+                $sql .= " AND email IS NOT NULL AND email != ''";
+                break;
+            case 'no-email':
+                $sql .= " AND (email IS NULL OR email = '')";
+                break;
+            default:
+                break;
+        }
+
+        // Order logic
+        switch ($orderBy) {
+            case 'firstname-asc':
+                $orderClause = " ORDER BY firstname ASC";
+                break;
+            case 'firstname-desc':
+                $orderClause = " ORDER BY firstname DESC";
+                break;
+            case 'lastname-asc':
+                $orderClause = " ORDER BY lastname ASC";
+                break;
+            case 'lastname-desc':
+                $orderClause = " ORDER BY lastname DESC";
+                break;
+            case 'email-asc':
+                $orderClause = " ORDER BY email ASC";
+                break;
+            case 'email-desc':
+                $orderClause = " ORDER BY email DESC";
+                break;
+            case 'job_title-asc':
+                $orderClause = " ORDER BY job_title ASC";
+                break;
+            case 'job_title-desc':
+                $orderClause = " ORDER BY job_title DESC";
+                break;
+            case 'phone-asc':
+                $orderClause = " ORDER BY phone ASC";
+                break;
+            case 'phone-desc':
+                $orderClause = " ORDER BY phone DESC";
+                break;
+            case 'birth_date-asc':
+                $orderClause = " ORDER BY birth_date ASC";
+                break;
+            case 'birth_date-desc':
+                $orderClause = " ORDER BY birth_date DESC";
+                break;
+            case 'newest':
+                $orderClause = " ORDER BY employee_id DESC";
+                break;
+            case 'oldest':
+                $orderClause = " ORDER BY employee_id ASC";
+                break;
+            default:
+                break;
+        }
+
+        $sql .= $orderClause;
+
+        $stmt = $conn->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch(PDOException $e) {
+        return ['error' => "Database error: " . $e->getMessage()];
+    }
+}
+
+// Handle AJAX search request
+if (isset($_POST['action']) && $_POST['action'] === 'search') {
+    $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+    $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+    $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+    $employees = fetchEmployees($conn, $searchTerm, $orderBy, $filterBy);
+    header('Content-Type: application/json');
+    echo json_encode($employees);
+    exit;
+}
+
+// Initial page load
+$searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+$employees = fetchEmployees($conn, $searchTerm, $orderBy, $filterBy);
+if (isset($employees['error'])) {
+    $error = $employees['error'];
+    $employees = [];
 }
 ?>
 
@@ -47,6 +170,17 @@ try {
     <link href="../statics/bootstrap css/bootstrap.min.css" rel="stylesheet">
     <link href="../statics/Employees.css" rel="stylesheet">
     <script src="https://kit.fontawesome.com/31e24a5c2a.js" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        /* Add minimal styling to ensure select boxes render properly */
+        select.btn.btn-outline-secondary {
+            appearance: auto;
+            padding: 5px;
+            min-width: 150px;
+            margin-left: 10px;
+        }
+    </style>
 </head>
 <body>
 <div class="left-sidebar">
@@ -94,34 +228,41 @@ try {
     <div class="d-flex justify-content-between mb-3">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" id="searchInput" placeholder="Search by Employee ID, Name, Email, etc." value="<?php echo htmlspecialchars($searchTerm); ?>">
         </div>
         <div>
             <button class="btn btn-dark" id="newProductBtn" data-bs-toggle="modal" data-bs-target="#employeeModal">New <i class="fa fa-plus"></i></button>
-            <select class="btn btn-outline-secondary">
-                <option>Order By</option>
-                <option>Ascending (A → Z)</option>
-                <option>Descending (Z → A)</option>
-                <option>Low Price (Ascending)</option>
-                <option>High Price (Descending)</option>
-                <option>Newest</option>
-                <option>Oldest</option>
-                <option>Best Seller</option>
+            <select class="btn btn-outline-secondary" name="orderBy" id="orderBySelect" onchange="updateTable()">
+                <option value="">Order By</option>
+                <option value="firstname-asc" <?php if ($orderBy === 'firstname-asc') echo 'selected'; ?>>First Name (A → Z)</option>
+                <option value="firstname-desc" <?php if ($orderBy === 'firstname-desc') echo 'selected'; ?>>First Name (Z → A)</option>
+                <option value="lastname-asc" <?php if ($orderBy === 'lastname-asc') echo 'selected'; ?>>Last Name (A → Z)</option>
+                <option value="lastname-desc" <?php if ($orderBy === 'lastname-desc') echo 'selected'; ?>>Last Name (Z → A)</option>
+                <option value="email-asc" <?php if ($orderBy === 'email-asc') echo 'selected'; ?>>Email (A → Z)</option>
+                <option value="email-desc" <?php if ($orderBy === 'email-desc') echo 'selected'; ?>>Email (Z → A)</option>
+                <option value="job_title-asc" <?php if ($orderBy === 'job_title-asc') echo 'selected'; ?>>Job Title (A → Z)</option>
+                <option value="job_title-desc" <?php if ($orderBy === 'job_title-desc') echo 'selected'; ?>>Job Title (Z → A)</option>
+                <option value="phone-asc" <?php if ($orderBy === 'phone-asc') echo 'selected'; ?>>Phone (A → Z)</option>
+                <option value="phone-desc" <?php if ($orderBy === 'phone-desc') echo 'selected'; ?>>Phone (Z → A)</option>
+                <option value="birth_date-asc" <?php if ($orderBy === 'birth_date-asc') echo 'selected'; ?>>Birth Date (Oldest First)</option>
+                <option value="birth_date-desc" <?php if ($orderBy === 'birth_date-desc') echo 'selected'; ?>>Birth Date (Youngest First)</option>
+                <option value="newest" <?php if ($orderBy === 'newest') echo 'selected'; ?>>Newest</option>
+                <option value="oldest" <?php if ($orderBy === 'oldest') echo 'selected'; ?>>Oldest</option>
             </select>
-            <select class="btn btn-outline-secondary">
-                <option>Product Type</option>
-                <option>Product Supplier</option>
-                <option>Below ₱1,000</option>
-                <option>₱1,000 - ₱5,000</option>
-                <option>₱5,000 - ₱10,000</option>
-                <option>Above ₱10,000</option>
-                <option>In-Stock</option>
-                <option>Out of Stock</option>
+            <select class="btn btn-outline-secondary" name="filterBy" id="filterBySelect" onchange="updateTable()">
+                <option value="">Filter By</option>
+                <option value="job-admin" <?php if ($filterBy === 'job-admin') echo 'selected'; ?>>Job Title: Admin</option>
+                <option value="job-manager" <?php if ($filterBy === 'job-manager') echo 'selected'; ?>>Job Title: Manager</option>
+                <option value="age-18-30" <?php if ($filterBy === 'age-18-30') echo 'selected'; ?>>Age: 18-30</option>
+                <option value="age-31-50" <?php if ($filterBy === 'age-31-50') echo 'selected'; ?>>Age: 31-50</option>
+                <option value="age-above-50" <?php if ($filterBy === 'age-above-50') echo 'selected'; ?>>Age: Above 50</option>
+                <option value="has-email" <?php if ($filterBy === 'has-email') echo 'selected'; ?>>Has Email</option>
+                <option value="no-email" <?php if ($filterBy === 'no-email') echo 'selected'; ?>>No Email</option>
             </select>
         </div>
     </div>
 
-    <table class="table table-striped table-hover">
+    <table class="table table-striped table-hover" id="employeeTable">
         <thead>
             <tr>
                 <th>Employee ID</th>
@@ -133,8 +274,12 @@ try {
                 <th>Birth Date</th>
             </tr>
         </thead>
-        <tbody>
-            <?php if (empty($employees)): ?>
+        <tbody id="employeeTableBody">
+            <?php if (isset($error)): ?>
+                <tr>
+                    <td colspan="7" class="text-center text-danger"><?php echo htmlspecialchars($error); ?></td>
+                </tr>
+            <?php elseif (empty($employees)): ?>
                 <tr>
                     <td colspan="7" class="text-center text-muted">No Employees available. Input new employee.</td>
                 </tr>
@@ -202,14 +347,14 @@ try {
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var dropdowns = document.querySelectorAll('.dropdown');
-    dropdowns.forEach(function(dropdown) {
-        var toggleBtn = dropdown.querySelector('.toggle-btn');
-        toggleBtn.addEventListener('click', function() {
-            dropdown.classList.toggle('active');
-        });
+    // Dropdown functionality
+    const dropdowns = document.querySelectorAll('.dropdown');
+    dropdowns.forEach(dropdown => {
+        const toggleBtn = dropdown.querySelector('.toggle-btn');
+        toggleBtn.addEventListener('click', () => dropdown.classList.toggle('active'));
     });
 
+    // Save employee functionality
     document.getElementById('saveEmployeeBtn').addEventListener('click', function() {
         const form = document.getElementById('newEmployeeForm');
         
@@ -225,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     alert('Employee saved successfully!');
                     bootstrap.Modal.getInstance(document.getElementById('employeeModal')).hide();
-                    location.reload();
+                    updateTable(); // Refresh table instead of reloading page
                 } else {
                     alert('Error saving employee: ' + data.message);
                 }
@@ -238,8 +383,88 @@ document.addEventListener('DOMContentLoaded', function() {
             form.reportValidity();
         }
     });
+
+    // Search, Order By, and Filter By functionality
+    const searchInput = document.getElementById('searchInput');
+    let searchTimeout;
+
+    function updateTable() {
+        const searchTerm = searchInput.value.trim();
+        const orderBy = document.querySelector('select[name="orderBy"]').value;
+        const filterBy = document.querySelector('select[name="filterBy"]').value;
+
+        console.log('Updating table with:', { searchTerm, orderBy, filterBy }); // Debug
+
+        $.ajax({
+            url: 'Employees.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                orderBy: orderBy,
+                filterBy: filterBy
+            },
+            success: function(employees) {
+                console.log('Employees received:', employees); // Debug log
+                const tbody = document.getElementById('employeeTableBody');
+                tbody.innerHTML = '';
+
+                if (employees.error) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${employees.error}</td></tr>`;
+                    return;
+                }
+
+                if (employees.length > 0) {
+                    employees.forEach(employee => {
+                        const row = `
+                            <tr>
+                                <td>${employee.employee_id}</td>
+                                <td>${employee.firstname || ''}</td>
+                                <td>${employee.lastname || ''}</td>
+                                <td>${employee.email || ''}</td>
+                                <td>${employee.job_title || ''}</td>
+                                <td>${employee.phone || ''}</td>
+                                <td>${employee.birth_date || ''}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No Employees available. Input new employee.</td></tr>';
+                }
+
+                // Update the select elements to reflect current values
+                document.querySelector('select[name="orderBy"]').value = orderBy;
+                document.querySelector('select[name="filterBy"]').value = filterBy;
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('employeeTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading employees</td></tr>';
+            }
+        });
+    }
+
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300); // 300ms debounce
+    });
+
+    // Ensure dropdowns trigger table updates
+    document.querySelector('select[name="orderBy"]').addEventListener('change', function() {
+        console.log('Order By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    document.querySelector('select[name="filterBy"]').addEventListener('change', function() {
+        console.log('Filter By selected:', this.value); // Debug
+        updateTable();
+    });
+
+    // Initial table load
+    updateTable();
 });
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

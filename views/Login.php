@@ -1,8 +1,22 @@
 <?php
 include '../database/database.php';
-
 session_start();
-$error_message = ""; 
+
+$error_message = "";
+
+// Function to log an action into the audit_logs table
+function logAction($conn, $username, $action, $description) {
+    try {
+        $stmt = $conn->prepare("INSERT INTO audit_logs (username, action, description, timestamp) VALUES (:username, :action, :description, NOW())");
+        $stmt->execute([
+            ':username' => $username,
+            ':action' => $action,
+            ':description' => $description
+        ]);
+    } catch (PDOException $e) {
+        error_log("Error logging action: " . $e->getMessage());
+    }
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = $_POST['username'];
@@ -18,16 +32,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($user && password_verify($password, $user['password'])) {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
+            // Log successful login
+            logAction($conn, $username, "Login", "User logged into the system successfully");
             echo "<script>alert('Login successful!'); window.location.href = 'dashboard.php';</script>";
             exit;
         } else {
+            // Log failed login attempt
+            logAction($conn, $username, "Login Failed", "User failed to log in with incorrect credentials");
             $error_message = "Invalid username or password.";
         }
     } catch (PDOException $e) {
+        // Log error if database fails
+        logAction($conn, $username, "Login Error", "Database error during login: " . $e->getMessage());
         $error_message = "Error: " . $e->getMessage();
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -92,26 +113,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <h3 class="mb-3" style="margin-top: -10px;">USER LOGIN</h3>
         <?php if (!empty($error_message)) echo "<div class='alert alert-danger'>$error_message</div>"; ?>
         <form method="POST" action="login.php">
-        <div class="mb-3">
-            <div class="input-group">
-                <span class="input-group-text"><i class="fa-regular fa-user"></i></span>
-                <input type="text" name="username" class="form-control" placeholder="Username" required>
+            <div class="mb-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-regular fa-user"></i></span>
+                    <input type="text" name="username" class="form-control" placeholder="Username" required>
+                </div>
             </div>
-        </div>
 
-        <div class="mb-3">
-            <div class="input-group">
-                <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
-                <input type="password" name="password" class="form-control" placeholder="Password" required>
+            <div class="mb-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
+                    <input type="password" name="password" class="form-control" placeholder="Password" required>
+                </div>
             </div>
-        </div>
 
-        <div class="mb-3">
-            <div class="input-group">
-                <span class="input-group-text"><i class="fa-solid fa-user-tag"></i></span>
-                <input type="text" name="role" class="form-control" placeholder="Role" required>
+            <div class="mb-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fa-solid fa-user-tag"></i></span>
+                    <input type="text" name="role" class="form-control" placeholder="Role" required>
+                </div>
             </div>
-        </div>
 
             <button type="submit" class="btn btn-dark w-100" style="width: 80px; height: 20px; margin-top: 20px">Login</button>
         </form>

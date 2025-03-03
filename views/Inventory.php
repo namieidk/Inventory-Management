@@ -6,7 +6,6 @@ session_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-
 // Handle AJAX requests
 if (isset($_GET['product_id'])) {
     $product_id = $_GET['product_id'];
@@ -53,7 +52,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $price = floatval($_POST['price']);
         $stock = intval($_POST['stock']);
         $status = $_POST['status'];
-        $userId = isset($_SESSION['usersId']) ? $_SESSION['usersId'] : 1; // Default to 1 if no user logged in
+        $userId = isset($_SESSION['usersId']) ? $_SESSION['usersId'] : 1;
         if ($price >= 0 && $stock >= 0) {
             $stmt = $conn->prepare("INSERT INTO products (product_name, product_type, supplier_name, price, stock, status, usersId) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$productName, $productType, $supplierName, $price, $stock, $status, $userId]);
@@ -61,74 +60,110 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-// Fetch products with sorting and filtering
-try {
-    $sql = "SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.usersId = u.usersId WHERE 1=1";
+// Unified fetch function for both initial load and AJAX
+function fetchProducts($conn, $searchTerm = '', $orderBy = '', $filterBy = '') {
+    try {
+        $sql = "SELECT p.*, u.username AS created_by FROM products p LEFT JOIN users u ON p.usersId = u.usersId WHERE 1=1";
+        $whereClause = '';
+        $orderClause = " ORDER BY p.id ASC";
+        $params = array();
+
+        // Search functionality
+        if (!empty($searchTerm)) {
+            $whereClause .= " AND (p.product_name LIKE :search 
+                              OR p.product_type LIKE :search 
+                              OR p.supplier_name LIKE :search 
+                              OR p.id LIKE :search)";
+            $params[':search'] = "%$searchTerm%";
+        }
+
+        // Filter logic
+        switch ($filterBy) {
+            case 'product-type':
+            case 'product-supplier':
+                break; // Add specific logic if needed
+            case 'price-below-1000':
+                $whereClause .= " AND p.price < 1000";
+                break;
+            case 'price-1000-5000':
+                $whereClause .= " AND p.price BETWEEN 1000 AND 5000";
+                break;
+            case 'price-5000-10000':
+                $whereClause .= " AND p.price BETWEEN 5000 AND 10000";
+                break;
+            case 'price-above-10000':
+                $whereClause .= " AND p.price > 10000";
+                break;
+            case 'in-stock':
+                $whereClause .= " AND p.stock > 0";
+                break;
+            case 'out-of-stock':
+                $whereClause .= " AND p.stock = 0";
+                break;
+        }
+
+        // Order logic
+        switch ($orderBy) {
+            case 'name-asc':
+                $orderClause = " ORDER BY p.product_name ASC";
+                break;
+            case 'name-desc':
+                $orderClause = " ORDER BY p.product_name DESC";
+                break;
+            case 'price-asc':
+                $orderClause = " ORDER BY p.price ASC";
+                break;
+            case 'price-desc':
+                $orderClause = " ORDER BY p.price DESC";
+                break;
+            case 'newest':
+                $orderClause = " ORDER BY p.created_at DESC";
+                break;
+            case 'oldest':
+                $orderClause = " ORDER BY p.created_at ASC";
+                break;
+            case 'best-seller':
+                $orderClause = " ORDER BY p.stock DESC";
+                break;
+            case 'active':
+                $whereClause .= " AND p.status = 'active'";
+                break;
+            case 'inactive':
+                $whereClause .= " AND p.status = 'inactive'";
+                break;
+        }
+
+        $sql .= $whereClause . $orderClause;
+        $stmt = $conn->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return ['error' => "Database error: " . $e->getMessage()];
+    }
+}
+
+// Handle AJAX search request
+if (isset($_POST['action']) && $_POST['action'] === 'search') {
+    $searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
     $orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
     $filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
-    $whereClause = '';
-    $orderClause = " ORDER BY p.id ASC";
+    $products = fetchProducts($conn, $searchTerm, $orderBy, $filterBy);
+    header('Content-Type: application/json');
+    echo json_encode($products);
+    exit;
+}
 
-    switch ($filterBy) {
-        case 'product-type':
-            break;
-        case 'product-supplier':
-            break;
-        case 'price-below-1000':
-            $whereClause .= " AND p.price < 1000";
-            break;
-        case 'price-1000-5000':
-            $whereClause .= " AND p.price BETWEEN 1000 AND 5000";
-            break;
-        case 'price-5000-10000':
-            $whereClause .= " AND p.price BETWEEN 5000 AND 10000";
-            break;
-        case 'price-above-10000':
-            $whereClause .= " AND p.price > 10000";
-            break;
-        case 'in-stock':
-            $whereClause .= " AND p.stock > 0";
-            break;
-        case 'out-of-stock':
-            $whereClause .= " AND p.stock = 0";
-            break;
-    }
-
-    switch ($orderBy) {
-        case 'name-asc':
-            $orderClause = " ORDER BY p.product_name ASC";
-            break;
-        case 'name-desc':
-            $orderClause = " ORDER BY p.product_name DESC";
-            break;
-        case 'price-asc':
-            $orderClause = " ORDER BY p.price ASC";
-            break;
-        case 'price-desc':
-            $orderClause = " ORDER BY p.price DESC";
-            break;
-        case 'newest':
-            $orderClause = " ORDER BY p.created_at DESC";
-            break;
-        case 'oldest':
-            $orderClause = " ORDER BY p.created_at ASC";
-            break;
-        case 'best-seller':
-            $orderClause = " ORDER BY p.stock DESC";
-            break;
-        case 'active':
-            $whereClause .= " AND p.status = 'active'";
-            break;
-        case 'inactive':
-            $whereClause .= " AND p.status = 'inactive'";
-            break;
-    }
-
-    $sql .= $whereClause . $orderClause;
-    $stmt = $conn->query($sql);
-    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $error = "Database error: " . $e->getMessage();
+// Initial page load
+$searchTerm = isset($_POST['search']) ? $_POST['search'] : '';
+$orderBy = isset($_POST['orderBy']) ? $_POST['orderBy'] : '';
+$filterBy = isset($_POST['filterBy']) ? $_POST['filterBy'] : '';
+$products = fetchProducts($conn, $searchTerm, $orderBy, $filterBy);
+if (isset($products['error'])) {
+    $error = $products['error'];
+    $products = [];
 }
 ?>
 
@@ -148,18 +183,18 @@ try {
         .left-sidebar {
             position: fixed;
             top: 0;
-            left: -250px; /* Initially hidden */
+            left: -250px;
             width: 250px;
             height: 100%;
             background-color: #343F79;
             transition: left 0.3s ease;
-            z-index: 1000; /* Above main content */
+            z-index: 1000;
         }
         .left-sidebar.active {
-            left: 0; /* Visible when active */
+            left: 0;
         }
         .main-content {
-            margin-left: 0; /* Fixed position, no shift */
+            margin-left: 0;
             display: flex;
             flex-direction: column;
             width: 100%;
@@ -221,6 +256,10 @@ try {
             white-space: nowrap;
             padding: 8px;
         }
+        .low-stock {
+            color: red;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -270,11 +309,11 @@ try {
     <div class="controls-container">
         <div class="search-container">
             <i class="fa fa-search"></i>
-            <input type="text" class="form-control" placeholder="Search...">
+            <input type="text" class="form-control" id="searchInput" name="search" placeholder="Search..." value="<?php echo htmlspecialchars($searchTerm); ?>">
         </div>
         <button type="button" class="btn btn-dark mr-2" id="newProductBtn">New <i class="fa fa-plus"></i></button>
-        <form name="filterForm" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post" class="d-flex align-items-center">
-            <select class="btn btn-outline-secondary mr-2" name="orderBy" onchange="this.form.submit();">
+        <form name="filterForm" id="filterForm" method="post" class="d-flex align-items-center">
+            <select class="btn btn-outline-secondary mr-2" name="orderBy" onchange="updateTable()">
                 <option value="">Order By</option>
                 <option value="name-asc" <?php if ($orderBy == 'name-asc') echo 'selected'; ?>>Ascending (A → Z)</option>
                 <option value="name-desc" <?php if ($orderBy == 'name-desc') echo 'selected'; ?>>Descending (Z → A)</option>
@@ -286,7 +325,7 @@ try {
                 <option value="active" <?php if ($orderBy == 'active') echo 'selected'; ?>>Active</option>
                 <option value="inactive" <?php if ($orderBy == 'inactive') echo 'selected'; ?>>Inactive</option>
             </select>
-            <select class="btn btn-outline-secondary" name="filterBy" onchange="this.form.submit();">
+            <select class="btn btn-outline-secondary" name="filterBy" onchange="updateTable()">
                 <option value="">Filtered By</option>
                 <option value="product-type" <?php if ($filterBy == 'product-type') echo 'selected'; ?>>Product Type</option>
                 <option value="product-supplier" <?php if ($filterBy == 'product-supplier') echo 'selected'; ?>>Product Supplier</option>
@@ -316,7 +355,7 @@ try {
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="productTableBody">
                 <?php if (isset($error)): ?>
                     <tr><td colspan="10" class="text-center text-danger"><?= htmlspecialchars($error) ?></td></tr>
                 <?php elseif (!empty($products)): ?>
@@ -327,7 +366,12 @@ try {
                             <td><?= htmlspecialchars($product['product_type']) ?></td>
                             <td><?= htmlspecialchars($product['supplier_name']) ?></td>
                             <td>₱<?= number_format($product['price'], 2) ?></td>
-                            <td><?= htmlspecialchars($product['stock']) ?></td>
+                            <td>
+                                <?= htmlspecialchars($product['stock']) ?>
+                                <?php if ($product['stock'] < 10): ?>
+                                    <span class="low-stock"> (Low Stock)</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= htmlspecialchars($product['status']) ?></td>
                             <td><?= htmlspecialchars($product['created_by'] ?? 'Unknown') ?></td>
                             <td><?= htmlspecialchars($product['created_at'] ?? 'N/A') ?></td>
@@ -465,11 +509,6 @@ try {
     </div>
 </div>
 
-<!-- Dependencies -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-<script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Sidebar toggle functionality
@@ -493,8 +532,6 @@ document.addEventListener('DOMContentLoaded', function() {
         sidebar.addEventListener('click', function(event) {
             event.stopPropagation();
         });
-    } else {
-        console.error('Sidebar or menu button not found');
     }
 
     // Dropdown toggle
@@ -565,7 +602,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data === 'success') {
                 alert('Product updated successfully');
                 $('#editProductModal').modal('hide');
-                location.reload();
+                updateTable();
             } else {
                 alert('Error updating product: ' + data);
             }
@@ -638,8 +675,89 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('stopButton').style.display = 'none';
         document.getElementById('result').textContent = 'Scan a barcode to see results here.';
     });
+
+    // Search and table update functionality
+    const searchInput = document.getElementById('searchInput');
+    let searchTimeout;
+
+    function updateTable() {
+        const searchTerm = searchInput.value.trim();
+        const orderBy = document.querySelector('select[name="orderBy"]').value;
+        const filterBy = document.querySelector('select[name="filterBy"]').value;
+
+        $.ajax({
+            url: 'Inventory.php',
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'search',
+                search: searchTerm,
+                orderBy: orderBy,
+                filterBy: filterBy
+            },
+            success: function(products) {
+                console.log('Products received:', products); // Debug log
+                const tbody = document.getElementById('productTableBody');
+                tbody.innerHTML = '';
+
+                if (products.error) {
+                    tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${products.error}</td></tr>`;
+                    return;
+                }
+
+                if (products.length > 0) {
+                    products.forEach(product => {
+                        const row = `
+                            <tr>
+                                <td>${product.id}</td>
+                                <td>${product.product_name}</td>
+                                <td>${product.product_type || ''}</td>
+                                <td>${product.supplier_name || ''}</td>
+                                <td>₱${Number(product.price).toFixed(2)}</td>
+                                <td>
+                                    ${product.stock}
+                                    ${product.stock < 10 ? '<span class="low-stock"> (Low Stock)</span>' : ''}
+                                </td>
+                                <td>${product.status}</td>
+                                <td>${product.created_by || 'Unknown'}</td>
+                                <td>${product.created_at || 'N/A'}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <button class="btn btn-warning btn-sm me-1" data-product-id="${product.id}" data-toggle="modal" data-target="#editProductModal">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-info btn-sm me-1" data-toggle="modal" data-target="#scannerModal">
+                                            <i class="fas fa-barcode"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center">No products found</td></tr>';
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error:', status, error);
+                document.getElementById('productTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error loading products</td></tr>';
+            }
+        });
+    }
+
+    // Debounced search
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(updateTable, 300);
+    });
+
+    // Initial update and filter/order change listeners
+    updateTable(); // Load initial data with current filters
+    document.querySelectorAll('select[name="orderBy"], select[name="filterBy"]').forEach(select => {
+        select.addEventListener('change', updateTable);
+    });
 });
 </script>
-
 </body>
 </html>
